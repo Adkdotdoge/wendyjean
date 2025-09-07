@@ -1,0 +1,287 @@
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { usePage } from '@inertiajs/react';
+
+export type GalleryItem = { src: string; alt?: string; href?: string; all?: string[]; slug?: string };
+
+function RevealOnScroll({ children, className = '', delay = 0 }: { children: ReactNode; className?: string; delay?: number }) {
+  return (
+    <div
+      style={{ transitionDelay: `${delay}ms` }}
+      className={[
+        'transition-all duration-700 ease-out will-change-transform will-change-opacity',
+        'opacity-100 translate-y-0',
+        className,
+      ].join(' ')}
+    >
+      {children}
+    </div>
+  );
+}
+
+type ServerGallery = {
+  name: string;
+  slug?: string;
+  primary_url?: string | null;
+  images_urls?: string[];
+};
+
+type PageProps = {
+  galleries?: Array<{
+    name: string;
+    slug?: string;
+    primary_url?: string | null;
+    images_urls?: string[];
+  }> | (() => any);
+};
+
+export default function Gallery({ items, endpoint = '/api/galleries', linkToDetail = false }: { items?: GalleryItem[]; endpoint?: string; linkToDetail?: boolean }) {
+  const [fetched, setFetched] = useState<GalleryItem[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalImages, setModalImages] = useState<string[]>([]);
+  const [modalLoading, setModalLoading] = useState(false);
+
+  const page = usePage<PageProps>();
+  const sharedGalleriesRaw = ((): any => {
+    const g = page?.props?.galleries as any;
+    return typeof g === 'function' ? g() : g;
+  })();
+  const listFromShared: GalleryItem[] = Array.isArray(sharedGalleriesRaw)
+    ? sharedGalleriesRaw
+        .filter((g) => g && typeof g === 'object' && g.primary_url)
+        .map((g: any) => ({
+          src: String(g.primary_url),
+          alt: g.name || 'Gallery',
+          href: undefined as string | undefined,
+          all: Array.isArray(g.images_urls) ? g.images_urls.filter(Boolean).map(String) : [String(g.primary_url)],
+          slug: g.slug,
+        }))
+    : [];
+
+  const listFromProps = Array.isArray(items) ? items : [];
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      if (listFromProps.length > 0 || listFromShared.length > 0 || !endpoint) return;
+      try {
+        setLoading(true);
+        setError(null);
+        const res = await fetch(endpoint, { headers: { Accept: 'application/json' } });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const raw = await res.json();
+        // Accept several payload shapes: Array | { data: [] } | { galleries: [] }
+        const rows: ServerGallery[] = Array.isArray(raw)
+          ? raw
+          : Array.isArray((raw as any).data)
+          ? (raw as any).data
+          : Array.isArray((raw as any).galleries)
+          ? (raw as any).galleries
+          : [];
+
+        // Helpful debug in dev: see what we actually received
+        if (process.env.NODE_ENV !== 'production') {
+          // eslint-disable-next-line no-console
+          console.debug('Galleries API payload:', raw);
+          // eslint-disable-next-line no-console
+          console.debug('Normalized rows:', rows);
+        }
+
+        const mapped: GalleryItem[] = rows
+          .filter((g) => g && typeof g === 'object' && !!g.primary_url)
+          .map((g) => {
+            const all = Array.isArray(g.images_urls)
+              ? g.images_urls.filter(Boolean).map(String)
+              : g.primary_url
+              ? [String(g.primary_url)]
+              : [];
+            return {
+              src: String(g.primary_url),
+              alt: g.name || 'Gallery',
+              href: undefined, // set below if you have detail pages
+              all,
+              slug: g.slug,
+            } as GalleryItem;
+          });
+
+        if (linkToDetail) {
+          for (let i = 0; i < rows.length; i++) {
+            const g = rows[i];
+            if (g?.slug && mapped[i]) {
+              mapped[i].href = `/galleries/${g.slug}`;
+            }
+          }
+        }
+
+        if (!cancelled) setFetched(mapped);
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message ?? 'Failed to load galleries');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [endpoint, listFromProps.length, listFromShared.length, linkToDetail]);
+
+  const list: GalleryItem[] = useMemo(() => {
+    if (listFromProps.length > 0) return listFromProps;
+    if (listFromShared.length > 0) return listFromShared;
+    if (Array.isArray(fetched)) return fetched;
+    return [];
+  }, [listFromProps, listFromShared, fetched]);
+
+  async function openGalleryModal(item: GalleryItem) {
+    const fallbackImgs = Array.isArray(item.all) && item.all.length > 0 ? item.all : [item.src];
+    setModalImages(fallbackImgs);
+    setIsModalOpen(true);
+
+    if (Array.isArray(item.all) && item.all.length > 1) return;
+    if (!item.slug || !endpoint) return;
+
+    try {
+      setModalLoading(true);
+      const base = endpoint.replace(/\/$/, '');
+      const url = `${base}/${encodeURIComponent(item.slug)}`;
+      const res = await fetch(url, { headers: { Accept: 'application/json' } });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const raw = await res.json();
+      // Accept shapes: { images_urls: [] } | { data: { images_urls: [] } }
+      const images = Array.isArray((raw as any).images_urls)
+        ? (raw as any).images_urls
+        : Array.isArray((raw as any)?.data?.images_urls)
+        ? (raw as any).data.images_urls
+        : null;
+
+      if (Array.isArray(images) && images.length > 0) {
+        const list = images.filter(Boolean).map(String);
+        setModalImages(list);
+      }
+    } catch (e) {
+      if (process.env.NODE_ENV !== 'production') {
+        // eslint-disable-next-line no-console
+        console.warn('Failed to fetch gallery details:', e);
+      }
+    } finally {
+      setModalLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setIsModalOpen(false);
+    }
+    if (isModalOpen) window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isModalOpen]);
+
+  useEffect(() => {
+    if (!isModalOpen) return;
+    const body = document.body;
+    const prevOverflow = body.style.overflow;
+    const prevPaddingRight = body.style.paddingRight;
+
+    // Prevent background scroll
+    body.style.overflow = 'hidden';
+
+    // Compensate for scrollbar to avoid content shift
+    const scrollBarGap = window.innerWidth - document.documentElement.clientWidth;
+    if (scrollBarGap > 0) {
+      body.style.paddingRight = `${scrollBarGap}px`;
+    }
+
+    return () => {
+      body.style.overflow = prevOverflow;
+      body.style.paddingRight = prevPaddingRight;
+    };
+  }, [isModalOpen]);
+
+  return (
+    <section id="gallery" className="mx-auto max-w-6xl scroll-mt-24 px-6 pb-24">
+      <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">Galleries</h2>
+      {loading && <div className="mt-6 text-sm opacity-70">Loading galleries…</div>}
+      {error && <div className="mt-6 text-sm text-red-600">{error}</div>}
+      <div className="mt-8 grid grid-cols-1 gap-6 md:grid-cols-2">
+        {list.map((item, idx) => (
+          <RevealOnScroll key={`${item.src}-${idx}`} delay={500 + idx * 250}>
+            <div className="relative aspect-square w-full overflow-hidden rounded-md shadow-sm">
+              {linkToDetail && item.href ? (
+                <a
+                  href={item.href}
+                  aria-label={item.alt ?? `Open ${idx + 1}`}
+                  className="block h-full w-full"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    openGalleryModal(item);
+                  }}
+                >
+                  <img src={item.src} alt={item.alt ?? `Gallery piece ${idx + 1}`} className="h-full w-full object-cover" loading="lazy" decoding="async" />
+                </a>
+              ) : (
+                <button type="button" onClick={() => openGalleryModal(item)} className="block h-full w-full text-left">
+                  <img src={item.src} alt={item.alt ?? `Gallery piece ${idx + 1}`} className="h-full w-full object-cover" loading="lazy" decoding="async" />
+                </button>
+              )}
+            </div>
+          </RevealOnScroll>
+        ))}
+        {!loading && list.length === 0 && (
+          <div className="text-sm text-muted-foreground">No galleries to display yet.</div>
+        )}
+      </div>
+      {isModalOpen && (
+        <div role="dialog" aria-modal="true" className="fixed inset-0 z-50">
+          {/* Overlay */}
+          <div className="absolute inset-0 z-0 bg-black/70" onClick={() => setIsModalOpen(false)} />
+
+          {/* Close button */}
+          <button
+            type="button"
+            onClick={() => setIsModalOpen(false)}
+            className="absolute right-4 top-4 z-30 rounded-md px-3 py-1 text-sm text-white/90 hover:bg-white/10 focus:outline-none"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+
+          {/* Bottom-centered floating close button */}
+          <button
+            type="button"
+            onClick={() => setIsModalOpen(false)}
+            className="absolute bottom-6 left-1/2 z-30 -translate-x-1/2 rounded-full bg-white/10 px-4 py-2 text-base text-white backdrop-blur hover:bg-white/20 focus:outline-none"
+            aria-label="Close gallery"
+          >
+            ✕ Close
+          </button>
+
+          {modalLoading && (
+            <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-md bg-black/50 px-3 py-1 text-sm text-white">
+              Loading…
+            </div>
+          )}
+
+          {/* Fullscreen content */}
+          <div className="relative z-10 h-full w-full overflow-auto p-4 sm:p-8">
+            <div className="mx-auto max-w-screen-2xl">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-2">
+                {modalImages.map((src, i) => (
+                  <div key={`${src}-${i}`} className="w-full overflow-hidden rounded-lg">
+                    <img
+                      src={src}
+                      alt={`Gallery image ${i + 1}`}
+                      className="w-full h-auto object-contain transition-transform duration-300 ease-out hover:scale-[1.03] active:scale-[1.05] focus:scale-[1.03] cursor-zoom-in will-change-transform"
+                      loading="lazy"
+                      decoding="async"
+                      tabIndex={0}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}

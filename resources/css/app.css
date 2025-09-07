@@ -139,3 +139,38 @@
         @apply bg-background text-foreground;
     }
 }
+
+@layer components {
+  .contact-form .wj-input {
+    @apply mt-1 w-full rounded-md border px-3 py-2
+           bg-white placeholder-gray-500
+           outline-none ring-1 ring-transparent
+           focus:ring-2 focus:ring-sky-500 focus:border-sky-500
+           transition duration-150;
+  }
+
+  .dark .contact-form .wj-input {
+    @apply bg-neutral-900/80 text-neutral-100
+           border-neutral-700 ring-1 ring-neutral-800
+           placeholder-neutral-500
+           outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400
+           transition duration-150;
+  }
+
+  .dark .contact-form .wj-input::placeholder {
+    @apply opacity-80;
+  }
+
+  .dark .contact-form .wj-input:disabled {
+    @apply opacity-60 cursor-not-allowed bg-neutral-900/60 border-neutral-800;
+  }
+
+  .contact-form .wj-input::placeholder {
+    @apply opacity-80;
+
+  }
+
+  .contact-form .wj-input:disabled {
+    @apply opacity-60 cursor-not-allowed;
+  }
+}

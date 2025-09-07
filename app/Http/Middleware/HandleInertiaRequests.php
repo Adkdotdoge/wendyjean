@@ -5,35 +5,17 @@ namespace App\Http\Middleware;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
+use App\Models\Gallery;
 
 class HandleInertiaRequests extends Middleware
 {
-    /**
-     * The root template that's loaded on the first page visit.
-     *
-     * @see https://inertiajs.com/server-side-setup#root-template
-     *
-     * @var string
-     */
     protected $rootView = 'app';
 
-    /**
-     * Determines the current asset version.
-     *
-     * @see https://inertiajs.com/asset-versioning
-     */
     public function version(Request $request): ?string
     {
         return parent::version($request);
     }
 
-    /**
-     * Define the props that are shared by default.
-     *
-     * @see https://inertiajs.com/shared-data
-     *
-     * @return array<string, mixed>
-     */
     public function share(Request $request): array
     {
         [$message, $author] = str(Inspiring::quotes()->random())->explode('-');
@@ -46,6 +28,27 @@ class HandleInertiaRequests extends Middleware
                 'user' => $request->user(),
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+            'galleries' => function () {
+                try {
+                    return cache()->remember('nav:galleries:v2', now()->addMinutes(10), function () {
+                        return Gallery::query()
+                            ->where('is_active', true)
+                            ->orderBy('name')
+                            ->with('primaryMedia:id,gallery_id,alt_text')
+                            ->get(['id', 'name', 'slug'])
+                            ->map(fn ($g) => [
+                                'id' => $g->id,
+                                'name' => $g->name,
+                                'slug' => $g->slug,
+                                'primary_url' => $g->primary_url, // accessor on Gallery model
+                                'images_urls' => $g->images_urls,
+                                'alt_text' => optional($g->primaryMedia)->alt_text,
+                            ]);
+                    });
+                } catch (\Throwable $e) {
+                    return [];
+                }
+            },
         ];
     }
 }
