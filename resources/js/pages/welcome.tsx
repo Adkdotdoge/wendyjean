@@ -5,7 +5,7 @@ import Navbar from '@/components/frontend/Navbar';
 import Hero from '@/components/frontend/Hero';
 import About from '@/components/frontend/About';
 import Gallery, { type GalleryItem as GalleryItemType } from '@/components/frontend/Gallery';
-import ContactForm from '@/components/frontend/contactform';
+import ContactForm from '@/components/frontend/ContactForm';
 
 type PageProps = SharedData & {
   gallery: {
