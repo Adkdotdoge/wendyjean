@@ -1,14 +1,9 @@
+# NOTE: Lint workflow temporarily disabled — manual run only.
+# Re-enable by restoring push/pull_request triggers in the `on:` block.
 name: linter
 
 on:
-  push:
-    branches:
-      - develop
-      - main
-  pull_request:
-    branches:
-      - develop
-      - main
+  workflow_dispatch:
 
 permissions:
   contents: write

@@ -30,16 +30,17 @@ class HandleInertiaRequests extends Middleware
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'galleries' => function () {
                 try {
-                    return cache()->remember('nav:galleries:v2', now()->addMinutes(10), function () {
+                    return cache()->remember('nav:galleries:v3', now()->addMinutes(10), function () {
                         return Gallery::query()
                             ->where('is_active', true)
-                            ->orderBy('name')
+                            ->ordered() // order by order_column ASC, nulls last
                             ->with('primaryMedia:id,gallery_id,alt_text')
-                            ->get(['id', 'name', 'slug'])
+                            ->get(['id', 'name', 'slug', 'order_column'])
                             ->map(fn ($g) => [
                                 'id' => $g->id,
                                 'name' => $g->name,
                                 'slug' => $g->slug,
+                                'order_column' => $g->order_column,
                                 'primary_url' => $g->primary_url, // accessor on Gallery model
                                 'images_urls' => $g->images_urls,
                                 'alt_text' => optional($g->primaryMedia)->alt_text,

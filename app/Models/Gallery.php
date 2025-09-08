@@ -17,12 +17,19 @@ class Gallery extends Model implements HasMedia
         'slug',
         'description',
         'is_active',
+        'order_column',
     ];
 
     /** @var array<int, string> */
     protected $appends = [
         'primary_url',
         'images_urls',
+    ];
+
+    /** @var array<string, string> */
+    protected $casts = [
+        'is_active' => 'boolean',
+        'order_column' => 'integer',
     ];
 
     public function registerMediaCollections(): void
@@ -61,7 +68,6 @@ class Gallery extends Model implements HasMedia
     {
         $items = $this->media()
             ->where('collection_name', 'images')
-            ->orderByRaw('CASE WHEN order_column IS NULL THEN 1 ELSE 0 END')
             ->orderBy('order_column')
             ->get();
 
@@ -76,5 +82,15 @@ class Gallery extends Model implements HasMedia
     {
         $urls = $this->images_urls;
         return $urls[0] ?? null;
+    }
+    /**
+     * Scope: order galleries with nulls last, then by order_column, then id.
+     */
+    public function scopeOrdered($query)
+    {
+        return $query
+            ->orderByRaw('CASE WHEN order_column IS NULL THEN 1 ELSE 0 END')
+            ->orderBy('order_column')
+            ->orderBy('id');
     }
 }

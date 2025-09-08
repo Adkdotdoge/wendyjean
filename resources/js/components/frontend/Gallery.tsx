@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { usePage } from '@inertiajs/react';
 
-export type GalleryItem = { src: string; alt?: string; href?: string; all?: string[]; slug?: string };
+export type GalleryItem = { src: string; alt?: string; href?: string; all?: string[]; slug?: string; order_column?: number | null; name?: string };
 
 function RevealOnScroll({ children, className = '', delay = 0 }: { children: ReactNode; className?: string; delay?: number }) {
   return (
@@ -23,6 +23,7 @@ type ServerGallery = {
   slug?: string;
   primary_url?: string | null;
   images_urls?: string[];
+  order_column?: number | null;
 };
 
 type PageProps = {
@@ -31,7 +32,22 @@ type PageProps = {
     slug?: string;
     primary_url?: string | null;
     images_urls?: string[];
+    order_column?: number | null;
   }> | (() => any);
+};
+
+// Sort helper: by order_column ASC, nulls last, then by name/slug for stability
+const orderSorter = (a: any, b: any) => {
+  const toNum = (v: any) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : Number.POSITIVE_INFINITY;
+  };
+  const ao = toNum(a?.order_column);
+  const bo = toNum(b?.order_column);
+  if (ao !== bo) return ao - bo; // ascending; flip to bo - ao for descending
+  const an = String(a?.name ?? a?.slug ?? '').toLowerCase();
+  const bn = String(b?.name ?? b?.slug ?? '').toLowerCase();
+  return an.localeCompare(bn);
 };
 
 export default function Gallery({ items, endpoint = '/api/galleries', linkToDetail = false }: { items?: GalleryItem[]; endpoint?: string; linkToDetail?: boolean }) {
@@ -48,13 +64,16 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
     return typeof g === 'function' ? g() : g;
   })();
   const listFromShared: GalleryItem[] = Array.isArray(sharedGalleriesRaw)
-    ? sharedGalleriesRaw
+    ? [...sharedGalleriesRaw]
         .filter((g) => g && typeof g === 'object' && g.primary_url)
+        .sort(orderSorter)
         .map((g: any) => ({
           src: String(g.primary_url),
           alt: g.name || 'Gallery',
           href: undefined as string | undefined,
           all: Array.isArray(g.images_urls) ? g.images_urls.filter(Boolean).map(String) : [String(g.primary_url)],
+          order_column: Number.isFinite(Number(g.order_column)) ? Number(g.order_column) : undefined,
+          name: g.name,
           slug: g.slug,
         }))
     : [];
@@ -88,7 +107,9 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
           console.debug('Normalized rows:', rows);
         }
 
-        const mapped: GalleryItem[] = rows
+        const sortedRows: ServerGallery[] = rows.slice().sort(orderSorter);
+
+        const mapped: GalleryItem[] = sortedRows
           .filter((g) => g && typeof g === 'object' && !!g.primary_url)
           .map((g) => {
             const all = Array.isArray(g.images_urls)
@@ -101,13 +122,15 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
               alt: g.name || 'Gallery',
               href: undefined, // set below if you have detail pages
               all,
+              order_column: Number.isFinite(Number(g.order_column)) ? Number(g.order_column) : undefined,
+              name: g.name,
               slug: g.slug,
             } as GalleryItem;
           });
 
         if (linkToDetail) {
-          for (let i = 0; i < rows.length; i++) {
-            const g = rows[i];
+          for (let i = 0; i < sortedRows.length; i++) {
+            const g = sortedRows[i];
             if (g?.slug && mapped[i]) {
               mapped[i].href = `/galleries/${g.slug}`;
             }
@@ -126,10 +149,27 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
   }, [endpoint, listFromProps.length, listFromShared.length, linkToDetail]);
 
   const list: GalleryItem[] = useMemo(() => {
-    if (listFromProps.length > 0) return listFromProps;
-    if (listFromShared.length > 0) return listFromShared;
-    if (Array.isArray(fetched)) return fetched;
-    return [];
+    const base = (listFromProps.length > 0)
+      ? listFromProps
+      : (listFromShared.length > 0)
+      ? listFromShared
+      : Array.isArray(fetched)
+      ? fetched
+      : [];
+
+    const toNum = (v: any) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : Number.POSITIVE_INFINITY; // nulls/undefined last
+    };
+
+    return base.slice().sort((a, b) => {
+      const ao = toNum((a as any).order_column);
+      const bo = toNum((b as any).order_column);
+      if (ao !== bo) return ao - bo; // ascending; flip to bo - ao for descending
+      const an = String((a as any).name ?? a.slug ?? a.alt ?? '').toLowerCase();
+      const bn = String((b as any).name ?? b.slug ?? b.alt ?? '').toLowerCase();
+      return an.localeCompare(bn);
+    });
   }, [listFromProps, listFromShared, fetched]);
 
   async function openGalleryModal(item: GalleryItem) {

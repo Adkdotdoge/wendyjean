@@ -10,8 +10,8 @@ use App\Http\Controllers\Public\ContactMessageController;
 
 Route::get('/', function () {
     $galleries = Gallery::query()
-        ->orderBy('name')
-        ->get(['id','name','slug'])
+        ->ordered() // order by order_column ASC, nulls last
+        ->get(['id','name','slug','order_column'])
         ->map(fn (Gallery $g) => [
             'src' => $g->primary_url,
             'alt' => $g->name,
@@ -36,15 +36,16 @@ require __DIR__.'/auth.php';
 Route::get('/api/galleries', function () {
     $rows = Gallery::query()
         ->where('is_active', true)
-        ->orderBy('name')
-        ->get();
+        ->ordered() // order by order_column ASC, nulls last
+        ->get(['id','name','slug','order_column']);
 
     return response()->json(
         $rows->map(fn (Gallery $g) => [
-            'name' => $g->name,
-            'slug' => $g->slug,
-            'primary_url' => $g->primary_url,
-            'images_urls' => $g->images_urls,
+            'name'         => $g->name,
+            'slug'         => $g->slug,
+            'order_column' => $g->order_column,
+            'primary_url'  => $g->primary_url,
+            'images_urls'  => $g->images_urls,
         ])->values()
     );
 });
