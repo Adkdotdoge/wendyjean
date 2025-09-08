@@ -26,6 +26,10 @@ function RevealOnScroll({ children, className = '', delay = 0 }: { children: Rea
 
 function TiltImage({
   src,
+  srcSet,
+  sizes,
+  preload = false,
+  fetchPriority,
   alt,
   className = '',
   containerClassName = '',
@@ -34,6 +38,10 @@ function TiltImage({
   tabIndex,
 }: {
   src: string;
+  srcSet?: string;
+  sizes?: string;
+  preload?: boolean;
+  fetchPriority?: 'high' | 'low' | 'auto' | undefined;
   alt?: string;
   className?: string;
   containerClassName?: string;
@@ -50,6 +58,28 @@ function TiltImage({
   // Fade/scale-in when loaded, reset when src changes
   const [loaded, setLoaded] = useState(false);
   useEffect(() => { setLoaded(false); }, [src]);
+
+  // Safety: ensure we reveal even if onLoad never fires (cache/odd responses)
+  useEffect(() => {
+    if (loaded) return;
+    const t = setTimeout(() => setLoaded(true), 800);
+    return () => clearTimeout(t);
+  }, [loaded, src]);
+
+  // Optional: inject <link rel="preload" as="image"> for key images
+  useEffect(() => {
+    if (!preload || !src) return;
+    const link = document.createElement('link');
+    link.rel = 'preload';
+    link.as = 'image';
+    link.href = src;
+    if (srcSet) link.setAttribute('imagesrcset', srcSet);
+    if (sizes) link.setAttribute('imagesizes', sizes);
+    document.head.appendChild(link);
+    return () => {
+      try { document.head.removeChild(link); } catch {}
+    };
+  }, [preload, src, srcSet, sizes]);
 
   // Gracefully disable for users who prefer reduced motion
   const prefersReducedMotion = typeof window !== 'undefined' &&
@@ -158,11 +188,11 @@ function TiltImage({
       <img
         ref={imgRef}
         src={src}
+        srcSet={srcSet}
+        sizes={sizes}
         alt={alt ?? ''}
         className={[
-          // Ensure the image fills available space; callers can extend via className
           'block h-full w-full select-none',
-          // Smooth but responsive updates
           'transition-transform transition-opacity duration-200 ease-out will-change-transform transform-gpu',
           loaded ? 'opacity-100 scale-100' : 'opacity-0 scale-[0.98]',
           className,
@@ -171,6 +201,8 @@ function TiltImage({
         decoding="async"
         draggable={false}
         onLoad={() => setLoaded(true)}
+        onError={() => setLoaded(true)}
+        fetchPriority={fetchPriority}
       />
     </div>
   );
@@ -462,6 +494,8 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                     src={item.src}
                     alt={item.alt ?? `Gallery piece ${idx + 1}`}
                     className="h-full w-full object-cover"
+                    preload={idx < 3}
+                    fetchPriority={idx === 0 ? 'high' : undefined}
                   />
                 </a>
               ) : (
@@ -470,6 +504,8 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                     src={item.src}
                     alt={item.alt ?? `Gallery piece ${idx + 1}`}
                     className="h-full w-full object-cover"
+                    preload={idx < 3}
+                    fetchPriority={idx === 0 ? 'high' : undefined}
                   />
                 </button>
               )}
