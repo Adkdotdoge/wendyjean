@@ -4,12 +4,18 @@ import { usePage } from '@inertiajs/react';
 export type GalleryItem = { src: string; alt?: string; href?: string; all?: string[]; slug?: string; order_column?: number | null; name?: string };
 
 function RevealOnScroll({ children, className = '', delay = 0 }: { children: ReactNode; className?: string; delay?: number }) {
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const id = setTimeout(() => setShown(true), delay);
+    return () => clearTimeout(id);
+  }, [delay]);
+
   return (
     <div
       style={{ transitionDelay: `${delay}ms` }}
       className={[
-        'transition-all duration-500 ease-in-out will-change-transform will-change-opacity',
-        'opacity-100 translate-y-0',
+        'transition-all duration-500 ease-out will-change-transform will-change-opacity',
+        shown ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2',
         className,
       ].join(' ')}
     >
@@ -40,6 +46,10 @@ function TiltImage({
   const rafRef = useRef<number | null>(null);
   const orientationEnabledRef = useRef<boolean>(false);
   const orientationHandlerRef = useRef<((e: DeviceOrientationEvent) => void) | null>(null);
+
+  // Fade/scale-in when loaded, reset when src changes
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => { setLoaded(false); }, [src]);
 
   // Gracefully disable for users who prefer reduced motion
   const prefersReducedMotion = typeof window !== 'undefined' &&
@@ -140,6 +150,8 @@ function TiltImage({
       onPointerMove={onPointerMove}
       onPointerLeave={onPointerLeave}
       onPointerDown={enableOrientationOnce}
+      onClick={enableOrientationOnce}
+      onTouchStart={enableOrientationOnce}
       tabIndex={tabIndex}
       aria-label={alt}
     >
@@ -151,12 +163,14 @@ function TiltImage({
           // Ensure the image fills available space; callers can extend via className
           'block h-full w-full select-none',
           // Smooth but responsive updates
-          'transition-transform duration-150 ease-out will-change-transform',
+          'transition-transform transition-opacity duration-200 ease-out will-change-transform transform-gpu',
+          loaded ? 'opacity-100 scale-100' : 'opacity-0 scale-[0.98]',
           className,
         ].join(' ')}
         loading="lazy"
         decoding="async"
         draggable={false}
+        onLoad={() => setLoaded(true)}
       />
     </div>
   );
@@ -198,7 +212,8 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
   const [fetched, setFetched] = useState<GalleryItem[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isModalMounted, setIsModalMounted] = useState(false);
+  const [isModalActive, setIsModalActive] = useState(false);
   const [modalImages, setModalImages] = useState<string[]>([]);
   const [modalLoading, setModalLoading] = useState(false);
 
@@ -319,7 +334,8 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
   async function openGalleryModal(item: GalleryItem) {
     const fallbackImgs = Array.isArray(item.all) && item.all.length > 0 ? item.all : [item.src];
     setModalImages(fallbackImgs);
-    setIsModalOpen(true);
+    setIsModalMounted(true);
+    requestAnimationFrame(() => setIsModalActive(true));
 
     if (!item.slug || !endpoint) return;
 
@@ -354,34 +370,74 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
     }
   }
 
+  function closeModal() {
+    setIsModalActive(false);
+    setTimeout(() => setIsModalMounted(false), 200);
+  }
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setIsModalOpen(false);
+      if (e.key === 'Escape') closeModal();
     }
-    if (isModalOpen) window.addEventListener('keydown', onKey);
+    if (isModalMounted) window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isModalOpen]);
+  }, [isModalMounted]);
 
   useEffect(() => {
-    if (!isModalOpen) return;
+    if (!isModalMounted) return;
+
     const body = document.body;
-    const prevOverflow = body.style.overflow;
-    const prevPaddingRight = body.style.paddingRight;
+    const html = document.documentElement;
+    const scrollY = window.scrollY;
 
-    // Prevent background scroll
+    const prev = {
+      overflow: body.style.overflow,
+      position: body.style.position,
+      top: body.style.top,
+      left: body.style.left,
+      right: body.style.right,
+      width: body.style.width,
+      paddingRight: body.style.paddingRight,
+      overscrollBehavior: (body.style as any).overscrollBehavior || '',
+      touchAction: body.style.touchAction,
+    } as const;
+
+    const scrollBarGap = window.innerWidth - html.clientWidth;
+
+    // Lock body
     body.style.overflow = 'hidden';
-
-    // Compensate for scrollbar to avoid content shift
-    const scrollBarGap = window.innerWidth - document.documentElement.clientWidth;
+    body.style.position = 'fixed';
+    body.style.top = `-${scrollY}px`;
+    body.style.left = '0';
+    body.style.right = '0';
+    body.style.width = '100%';
     if (scrollBarGap > 0) {
       body.style.paddingRight = `${scrollBarGap}px`;
     }
+    (body.style as any).overscrollBehavior = 'contain';
+    body.style.touchAction = 'none';
+
+    // Prevent background touch scrolling on iOS
+    const preventTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
+    };
+    document.addEventListener('touchmove', preventTouchMove, { passive: false });
 
     return () => {
-      body.style.overflow = prevOverflow;
-      body.style.paddingRight = prevPaddingRight;
+      document.removeEventListener('touchmove', preventTouchMove);
+      body.style.overflow = prev.overflow;
+      body.style.position = prev.position;
+      body.style.top = prev.top;
+      body.style.left = prev.left;
+      body.style.right = prev.right;
+      body.style.width = prev.width;
+      body.style.paddingRight = prev.paddingRight;
+      (body.style as any).overscrollBehavior = prev.overscrollBehavior;
+      body.style.touchAction = prev.touchAction || '';
+      // Restore scroll position
+      window.scrollTo(0, scrollY);
     };
-  }, [isModalOpen]);
+  }, [isModalMounted]);
 
   return (
     <section id="gallery" className="mx-auto max-w-6xl scroll-mt-24 px-6 pb-24">
@@ -424,15 +480,21 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
           <div className="text-sm text-muted-foreground">No galleries to display yet.</div>
         )}
       </div>
-      {isModalOpen && (
+      {isModalMounted && (
         <div role="dialog" aria-modal="true" className="fixed inset-0 z-50">
           {/* Overlay */}
-          <div className="absolute inset-0 z-0 bg-black/70" onClick={() => setIsModalOpen(false)} />
+          <div
+            className={[
+              'absolute inset-0 z-0 bg-black/70 transition-opacity duration-200 ease-out',
+              isModalActive ? 'opacity-100' : 'opacity-0',
+            ].join(' ')}
+            onClick={closeModal}
+          />
 
           {/* Close button */}
           <button
             type="button"
-            onClick={() => setIsModalOpen(false)}
+            onClick={closeModal}
             className="absolute right-4 top-4 z-30 rounded-md px-3 py-1 text-sm text-white/90 hover:bg-white/10 focus:outline-none"
             aria-label="Close"
           >
@@ -442,7 +504,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
           {/* Bottom-centered floating close button */}
           <button
             type="button"
-            onClick={() => setIsModalOpen(false)}
+            onClick={closeModal}
             className="absolute bottom-6 left-1/2 z-30 -translate-x-1/2 rounded-full bg-white/10 px-4 py-2 text-base text-white backdrop-blur hover:bg-white/20 focus:outline-none"
             aria-label="Close gallery"
           >
@@ -456,11 +518,14 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
           )}
 
           {/* Fullscreen content */}
-          <div className="relative z-10 h-full w-full overflow-auto p-4 sm:p-8">
+          <div className={[
+            'relative z-10 h-full w-full overflow-auto p-4 sm:p-8 transition-all duration-200 ease-out',
+            isModalActive ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-1',
+          ].join(' ')}>
             <div className="mx-auto max-w-screen-2xl">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-2">
+              <div className="grid grid-cols-1 place-items-center gap-6">
                 {modalImages.map((src, i) => (
-                  <div key={`${src}-${i}`} className="w-full overflow-hidden rounded-lg">
+                  <div key={`${src}-${i}`} className="w-full max-w-3xl mx-auto overflow-hidden rounded-lg">
                     <TiltImage
                       src={src}
                       alt={`Gallery image ${i + 1}`}

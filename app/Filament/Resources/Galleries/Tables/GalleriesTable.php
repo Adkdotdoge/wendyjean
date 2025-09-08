@@ -9,6 +9,7 @@ use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\ImageColumn;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Schema;
 use Filament\Tables\Table;
 use Illuminate\Support\Carbon;
 
@@ -62,8 +63,7 @@ class GalleriesTable
                         // 2) Custom media() relation — try to build a temporary URL from disk/path
                         if (method_exists($record, 'media')) {
                             $first = $record->media()
-                                ->orderByDesc('is_primary')
-                                ->orderBy('sort_order')
+                                ->orderBy('order_column')
                                 ->orderBy('id')
                                 ->first();
 
