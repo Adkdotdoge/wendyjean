@@ -107,7 +107,7 @@ export default function Welcome() {
         <Gallery items={galleryItems} />
       </div>
       <div>
-<ContactForm />
+        <ContactForm />
       </div>
     </>
   );

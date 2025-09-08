@@ -20,7 +20,7 @@ export default function Navbar({
   links = [
     { label: 'Home', href: '#hero' },
     { label: 'About', href: '#about' },
-    { label: 'Contact', href: '#' },
+    { label: 'Contact', href: '#contact' },
     { label: 'Gallery', href: '#gallery' },
   ],
   cta = { label: 'Order Now', href: '/order' },
@@ -151,7 +151,7 @@ export default function Navbar({
             {cta && (
               <Link
                 href={cta.href}
-                className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
+                className="hidden rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
               >
                 {cta.label}
               </Link>
