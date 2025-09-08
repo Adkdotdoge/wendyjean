@@ -177,13 +177,12 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
     setModalImages(fallbackImgs);
     setIsModalOpen(true);
 
-    if (Array.isArray(item.all) && item.all.length > 1) return;
     if (!item.slug || !endpoint) return;
 
     try {
       setModalLoading(true);
       const base = endpoint.replace(/\/$/, '');
-      const url = `${base}/${encodeURIComponent(item.slug)}`;
+      const url = `${base}/${encodeURIComponent(item.slug)}?fresh=1`;
       const res = await fetch(url, { headers: { Accept: 'application/json' } });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const raw = await res.json();
@@ -196,7 +195,10 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
 
       if (Array.isArray(images) && images.length > 0) {
         const list = images.filter(Boolean).map(String);
-        setModalImages(list);
+        // Replace only if order/content changed to avoid flicker
+        if (JSON.stringify(list) !== JSON.stringify(fallbackImgs)) {
+          setModalImages(list);
+        }
       }
     } catch (e) {
       if (process.env.NODE_ENV !== 'production') {

@@ -36,6 +36,7 @@ class GalleryForm
                 ->collection('images')
                 ->multiple()
                 ->reorderable()               // drag to reorder; first image becomes cover
+                ->appendFiles()               // ensure new uploads are appended (not prepended)
                 ->panelLayout('grid')
                 ->image()
                 ->openable()
