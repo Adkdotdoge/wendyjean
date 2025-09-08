@@ -31,8 +31,9 @@ export default function ContactForm() {
   }
 
 return (
-    <section className="contact-form w-full flex justify-around bg-sky-100 dark:bg-neutral-950 py-12 text-gray-900 dark:text-neutral-100">
-    <form onSubmit={submit} className="space-y-4 min-w-2xl">
+    <section className="contact-form w-full px-1 flex justify-around bg-sky-100 dark:bg-neutral-950 py-12 text-gray-900 dark:text-neutral-100">
+    <form onSubmit={submit} className="space-y-4 w-2xl p-5 border-sky-500/50 border-4 rounded-3xl">
+    <h2>Send me a message!</h2>
       {/* Success flash (Inertia shares via props.flash?.success, but this catches recent form success) */}
       {recentlySuccessful && (
         <div className="rounded-md bg-green-50 text-green-800 p-3 text-sm dark:bg-green-900/20 dark:text-green-200 dark:ring-1 dark:ring-green-900/40">Thanks! Your message was sent.</div>
