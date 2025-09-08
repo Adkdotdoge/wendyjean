@@ -29,7 +29,13 @@ class SiteSetting extends Model implements HasMedia
     {
         $this
             ->addMediaCollection('hero')
-            ->singleFile();
+            ->singleFile()
+            ->acceptsMimeTypes([
+                'image/jpeg',
+                'image/png',
+                'image/webp',
+                'image/avif',
+            ]);
             // ->useDisk('private'); // uncomment if you’re using a private disk
     }
 

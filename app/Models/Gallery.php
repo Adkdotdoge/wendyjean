@@ -27,7 +27,14 @@ class Gallery extends Model implements HasMedia
 
     public function registerMediaCollections(): void
     {
-        $this->addMediaCollection('images');
+        $this
+            ->addMediaCollection('images')
+            ->acceptsMimeTypes([
+                'image/jpeg',
+                'image/png',
+                'image/webp',
+                'image/avif',
+            ]);
     }
 
     private function makeUrlForMedia(SpatieMedia $m): ?string
