@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { usePage } from '@inertiajs/react';
 
 export type GalleryItem = { src: string; alt?: string; href?: string; all?: string[]; slug?: string; order_column?: number | null; name?: string };
@@ -8,12 +8,156 @@ function RevealOnScroll({ children, className = '', delay = 0 }: { children: Rea
     <div
       style={{ transitionDelay: `${delay}ms` }}
       className={[
-        'transition-all duration-700 ease-out will-change-transform will-change-opacity',
+        'transition-all duration-500 ease-in-out will-change-transform will-change-opacity',
         'opacity-100 translate-y-0',
         className,
       ].join(' ')}
     >
       {children}
+    </div>
+  );
+}
+
+function TiltImage({
+  src,
+  alt,
+  className = '',
+  containerClassName = '',
+  maxRotate = 8, // degrees
+  maxTranslate = 8, // px
+  tabIndex,
+}: {
+  src: string;
+  alt?: string;
+  className?: string;
+  containerClassName?: string;
+  maxRotate?: number;
+  maxTranslate?: number;
+  tabIndex?: number;
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const orientationEnabledRef = useRef<boolean>(false);
+  const orientationHandlerRef = useRef<((e: DeviceOrientationEvent) => void) | null>(null);
+
+  // Gracefully disable for users who prefer reduced motion
+  const prefersReducedMotion = typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function applyTransform(rx: number, ry: number, tx: number, ty: number) {
+    if (!imgRef.current) return;
+    const t = `rotateX(${rx}deg) rotateY(${ry}deg) translate3d(${tx}px, ${ty}px, 0)`;
+    imgRef.current.style.transform = t;
+  }
+
+  function resetTransform() {
+    if (!imgRef.current) return;
+    imgRef.current.style.transform = 'none';
+  }
+
+  function scheduleApply(rx: number, ry: number, tx: number, ty: number) {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => applyTransform(rx, ry, tx, ty));
+  }
+
+  function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!containerRef.current || prefersReducedMotion) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const px = (e.clientX - rect.left) / rect.width; // 0..1
+    const py = (e.clientY - rect.top) / rect.height; // 0..1
+    const dx = (px - 0.5) * 2; // -1..1
+    const dy = (py - 0.5) * 2; // -1..1
+
+    const ry = dx * maxRotate;      // left/right -> Y rotation
+    const rx = -dy * maxRotate;     // up/down -> X rotation (invert for natural tilt)
+    const tx = dx * maxTranslate;
+    const ty = dy * maxTranslate;
+
+    scheduleApply(rx, ry, tx, ty);
+  }
+
+  function onPointerLeave() {
+    if (prefersReducedMotion) return;
+    scheduleApply(0, 0, 0, 0);
+  }
+
+  async function enableOrientationOnce() {
+    if (orientationEnabledRef.current || prefersReducedMotion) return;
+
+    try {
+      // iOS permission gate
+      // @ts-ignore
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        // @ts-ignore
+        const res = await DeviceOrientationEvent.requestPermission();
+        if (res !== 'granted') return;
+      }
+    } catch {
+      // ignore
+    }
+
+    const handler = (e: DeviceOrientationEvent) => {
+      if (!containerRef.current) return;
+      const gamma = typeof e.gamma === 'number' ? e.gamma : 0; // left/right, approx -90..90
+      const beta = typeof e.beta === 'number' ? e.beta : 0;   // front/back, approx -180..180
+
+      // Normalize and clamp to [-1,1]
+      const nx = Math.max(-45, Math.min(45, beta)) / 45;   // forward/back maps to X rotation
+      const ny = Math.max(-45, Math.min(45, gamma)) / 45;  // left/right maps to Y rotation
+
+      const rx = -nx * maxRotate;
+      const ry = ny * maxRotate;
+      const tx = ny * (maxTranslate * 0.6);
+      const ty = nx * (maxTranslate * 0.6);
+
+      scheduleApply(rx, ry, tx, ty);
+    };
+
+    orientationHandlerRef.current = handler;
+    window.addEventListener('deviceorientation', handler, true);
+    orientationEnabledRef.current = true;
+  }
+
+  useEffect(() => {
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (orientationHandlerRef.current) {
+        window.removeEventListener('deviceorientation', orientationHandlerRef.current, true);
+      }
+    };
+  }, []);
+
+  return (
+    <div
+      ref={containerRef}
+      className={[
+        'relative will-change-transform',
+        containerClassName,
+      ].join(' ')}
+      style={{ perspective: '800px' }}
+      onPointerMove={onPointerMove}
+      onPointerLeave={onPointerLeave}
+      onPointerDown={enableOrientationOnce}
+      tabIndex={tabIndex}
+      aria-label={alt}
+    >
+      <img
+        ref={imgRef}
+        src={src}
+        alt={alt ?? ''}
+        className={[
+          // Ensure the image fills available space; callers can extend via className
+          'block h-full w-full select-none',
+          // Smooth but responsive updates
+          'transition-transform duration-150 ease-out will-change-transform',
+          className,
+        ].join(' ')}
+        loading="lazy"
+        decoding="async"
+        draggable={false}
+      />
     </div>
   );
 }
@@ -258,11 +402,19 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                     openGalleryModal(item);
                   }}
                 >
-                  <img src={item.src} alt={item.alt ?? `Gallery piece ${idx + 1}`} className="h-full w-full object-cover" loading="lazy" decoding="async" />
+                  <TiltImage
+                    src={item.src}
+                    alt={item.alt ?? `Gallery piece ${idx + 1}`}
+                    className="h-full w-full object-cover"
+                  />
                 </a>
               ) : (
                 <button type="button" onClick={() => openGalleryModal(item)} className="block h-full w-full text-left">
-                  <img src={item.src} alt={item.alt ?? `Gallery piece ${idx + 1}`} className="h-full w-full object-cover" loading="lazy" decoding="async" />
+                  <TiltImage
+                    src={item.src}
+                    alt={item.alt ?? `Gallery piece ${idx + 1}`}
+                    className="h-full w-full object-cover"
+                  />
                 </button>
               )}
             </div>
@@ -309,12 +461,11 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-2">
                 {modalImages.map((src, i) => (
                   <div key={`${src}-${i}`} className="w-full overflow-hidden rounded-lg">
-                    <img
+                    <TiltImage
                       src={src}
                       alt={`Gallery image ${i + 1}`}
-                      className="w-full h-auto object-contain transition-transform duration-300 ease-out hover:scale-[1.03] active:scale-[1.05] focus:scale-[1.03] cursor-zoom-in will-change-transform"
-                      loading="lazy"
-                      decoding="async"
+                      className="w-full h-auto object-contain cursor-zoom-in"
+                      containerClassName="rounded-lg"
                       tabIndex={0}
                     />
                   </div>
