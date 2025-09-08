@@ -192,7 +192,7 @@ function TiltImage({
         sizes={sizes}
         alt={alt ?? ''}
         className={[
-          'block h-full w-full select-none',
+          'block w-full h-auto select-none',
           'transition-transform transition-opacity duration-200 ease-out will-change-transform transform-gpu',
           loaded ? 'opacity-100 scale-100' : 'opacity-0 scale-[0.98]',
           className,
@@ -248,6 +248,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
   const [isModalActive, setIsModalActive] = useState(false);
   const [modalImages, setModalImages] = useState<string[]>([]);
   const [modalLoading, setModalLoading] = useState(false);
+  const modalScrollRef = useRef<HTMLDivElement | null>(null);
 
   const page = usePage<PageProps>();
   const sharedGalleriesRaw = ((): any => {
@@ -447,16 +448,12 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
       body.style.paddingRight = `${scrollBarGap}px`;
     }
     (body.style as any).overscrollBehavior = 'contain';
-    body.style.touchAction = 'none';
+    // body.style.touchAction = 'none'; // Removed to allow modal content scrolling
 
-    // Prevent background touch scrolling on iOS
-    const preventTouchMove = (e: TouchEvent) => {
-      e.preventDefault();
-    };
-    document.addEventListener('touchmove', preventTouchMove, { passive: false });
+    // Removed: Prevent background touch scrolling on iOS
 
     return () => {
-      document.removeEventListener('touchmove', preventTouchMove);
+      // Removed: document.removeEventListener('touchmove', preventTouchMove);
       body.style.overflow = prev.overflow;
       body.style.position = prev.position;
       body.style.top = prev.top;
@@ -465,7 +462,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
       body.style.width = prev.width;
       body.style.paddingRight = prev.paddingRight;
       (body.style as any).overscrollBehavior = prev.overscrollBehavior;
-      body.style.touchAction = prev.touchAction || '';
+      // Removed: body.style.touchAction = prev.touchAction || '';
       // Restore scroll position
       window.scrollTo(0, scrollY);
     };
@@ -479,7 +476,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
       <div className="mt-8 grid grid-cols-1 gap-6 md:grid-cols-2">
         {list.map((item, idx) => (
           <RevealOnScroll key={`${item.src}-${idx}`} delay={500 + idx * 250}>
-            <div className="relative aspect-square w-full overflow-hidden rounded-md shadow-sm">
+            <div className="relative w-full overflow-hidden rounded-md shadow-sm">
               {linkToDetail && item.href ? (
                 <a
                   href={item.href}
@@ -493,7 +490,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                   <TiltImage
                     src={item.src}
                     alt={item.alt ?? `Gallery piece ${idx + 1}`}
-                    className="h-full w-full object-cover"
+                    className="w-full h-auto max-h-none object-contain"
                     preload={idx < 3}
                     fetchPriority={idx === 0 ? 'high' : undefined}
                   />
@@ -503,7 +500,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                   <TiltImage
                     src={item.src}
                     alt={item.alt ?? `Gallery piece ${idx + 1}`}
-                    className="h-full w-full object-cover"
+                    className="w-full h-auto max-h-none object-contain"
                     preload={idx < 3}
                     fetchPriority={idx === 0 ? 'high' : undefined}
                   />
@@ -554,10 +551,14 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
           )}
 
           {/* Fullscreen content */}
-          <div className={[
-            'relative z-10 h-full w-full overflow-auto p-4 sm:p-8 transition-all duration-200 ease-out',
-            isModalActive ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-1',
-          ].join(' ')}>
+          <div
+            ref={modalScrollRef}
+            className={[
+              'relative z-10 h-full w-full overflow-y-auto overscroll-contain p-4 sm:p-8 transition-all duration-200 ease-out',
+              isModalActive ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-1',
+            ].join(' ')}
+            style={{ WebkitOverflowScrolling: 'touch' } as any}
+          >
             <div className="mx-auto max-w-screen-2xl">
               <div className="grid grid-cols-1 place-items-center gap-6">
                 {modalImages.map((src, i) => (
@@ -565,7 +566,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                     <TiltImage
                       src={src}
                       alt={`Gallery image ${i + 1}`}
-                      className="w-full h-auto object-contain cursor-zoom-in"
+                      className="w-full h-auto max-h-[100svh] object-contain cursor-zoom-in"
                       containerClassName="rounded-lg"
                       tabIndex={0}
                     />
