@@ -1,4 +1,7 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+// Shared image decode/cache across grid & modal to avoid duplicate work
+const __imgDecodeCache: Map<string, Promise<void>> = new Map();
+const __imgCompleteCache: Set<string> = new Set();
 import { usePage } from '@inertiajs/react';
 
 export type GalleryItem = { src: string; alt?: string; href?: string; all?: string[]; slug?: string; order_column?: number | null; name?: string };
@@ -36,7 +39,6 @@ function TiltImage({
   maxRotate = 8, // degrees
   maxTranslate = 8, // px
   tabIndex,
-  enableMotionPrompt = false,
 }: {
   src: string;
   srcSet?: string;
@@ -49,22 +51,31 @@ function TiltImage({
   maxRotate?: number;
   maxTranslate?: number;
   tabIndex?: number;
-  enableMotionPrompt?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const orientationEnabledRef = useRef<boolean>(false);
   const orientationHandlerRef = useRef<((e: DeviceOrientationEvent) => void) | null>(null);
-  const motionListenerRef = useRef<((e: DeviceMotionEvent) => void) | null>(null);
-  const motionReadyRef = useRef<boolean>(false);
-
-  const [motionReady, setMotionReady] = useState(false);
-  const [motionDenied, setMotionDenied] = useState(false);
 
   // Fade/scale-in when loaded, reset when src changes
   const [loaded, setLoaded] = useState(false);
   useEffect(() => { setLoaded(false); }, [src]);
+
+  // If another instance already loaded/decoded this src, show instantly
+  useEffect(() => {
+    if (!src) return;
+    if (__imgCompleteCache.has(src)) {
+      setLoaded(true);
+      return;
+    }
+    // If a decode is already in-flight, piggyback
+    const inFlight = __imgDecodeCache.get(src);
+    if (inFlight) {
+      inFlight.then(() => setLoaded(true)).catch(() => setLoaded(true));
+      return;
+    }
+  }, [src]);
 
   // Safety: ensure we reveal even if onLoad never fires (cache/odd responses)
   useEffect(() => {
@@ -87,6 +98,25 @@ function TiltImage({
       try { document.head.removeChild(link); } catch {}
     };
   }, [preload, src, srcSet, sizes]);
+
+  // Pre-decode kicker: if not loaded and not in cache, start a background decode
+  useEffect(() => {
+    if (!src) return;
+    if (__imgCompleteCache.has(src) || __imgDecodeCache.has(src)) return;
+    // Start a background decode so subsequent instances are instant
+    const img = new Image();
+    img.decoding = 'async';
+    img.loading = 'eager';
+    img.src = src;
+    const p = (img.decode ? img.decode() : Promise.resolve()).catch(() => {});
+    __imgDecodeCache.set(src, p);
+    p.then(() => {
+      __imgCompleteCache.add(src);
+    });
+    return () => {
+      // no cleanup needed; we keep cache entries for session life
+    };
+  }, [src]);
 
   // Gracefully disable for users who prefer reduced motion
   const prefersReducedMotion = typeof window !== 'undefined' &&
@@ -130,87 +160,41 @@ function TiltImage({
     scheduleApply(0, 0, 0, 0);
   }
 
-  async function requestMotionPermission() {
-    if (motionReadyRef.current || prefersReducedMotion) return;
-    let orientationGranted = false;
-    let motionGranted = false;
-    let orientationTried = false;
-    let motionTried = false;
+  async function enableOrientationOnce() {
+    if (orientationEnabledRef.current || prefersReducedMotion) return;
+
     try {
-      // iOS 13+ permission gate
+      // iOS permission gate
       // @ts-ignore
       if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        orientationTried = true;
-        try {
-          // @ts-ignore
-          const res = await DeviceOrientationEvent.requestPermission();
-          if (res === 'granted') orientationGranted = true;
-          if (res === 'denied') {
-            setMotionDenied(true);
-            return;
-          }
-        } catch {}
+        // @ts-ignore
+        const res = await DeviceOrientationEvent.requestPermission();
+        if (res !== 'granted') return;
       }
-      // @ts-ignore
-      if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-        motionTried = true;
-        try {
-          // @ts-ignore
-          const res = await DeviceMotionEvent.requestPermission();
-          if (res === 'granted') motionGranted = true;
-          if (res === 'denied') {
-            setMotionDenied(true);
-            return;
-          }
-        } catch {}
-      }
-    } catch {}
-    // If neither API exists (non-iOS), or permission granted, continue
-    if (
-      (orientationTried && orientationGranted) ||
-      (motionTried && motionGranted) ||
-      (!orientationTried && !motionTried)
-    ) {
-      // Orientation handler (same as before)
-      const handler = (e: DeviceOrientationEvent) => {
-        if (!containerRef.current) return;
-        const gamma = typeof e.gamma === 'number' ? e.gamma : 0; // left/right, approx -90..90
-        const beta = typeof e.beta === 'number' ? e.beta : 0;   // front/back, approx -180..180
-
-        // Normalize and clamp to [-1,1]
-        const nx = Math.max(-45, Math.min(45, beta)) / 45;   // forward/back maps to X rotation
-        const ny = Math.max(-45, Math.min(45, gamma)) / 45;  // left/right maps to Y rotation
-
-        const rx = -nx * maxRotate;
-        const ry = ny * maxRotate;
-        const tx = ny * (maxTranslate * 0.6);
-        const ty = nx * (maxTranslate * 0.6);
-
-        scheduleApply(rx, ry, tx, ty);
-      };
-      orientationHandlerRef.current = handler;
-      window.addEventListener('deviceorientation', handler, true);
-
-      // DeviceMotion handler
-      const motionHandler = (e: DeviceMotionEvent) => {
-        const ax = (e.accelerationIncludingGravity?.x ?? 0);
-        const ay = (e.accelerationIncludingGravity?.y ?? 0);
-        const nx = Math.max(-9.8, Math.min(9.8, ay)) / 9.8; // forward/back to X rotation
-        const ny = Math.max(-9.8, Math.min(9.8, ax)) / 9.8; // left/right to Y rotation
-        const rx = -nx * maxRotate;
-        const ry = ny * maxRotate;
-        const tx = ny * (maxTranslate * 0.6);
-        const ty = nx * (maxTranslate * 0.6);
-        scheduleApply(rx, ry, tx, ty);
-      };
-      motionListenerRef.current = motionHandler;
-      window.addEventListener('devicemotion', motionHandler, true);
-
-      orientationEnabledRef.current = true;
-      motionReadyRef.current = true;
-      setMotionReady(true);
-      setMotionDenied(false);
+    } catch {
+      // ignore
     }
+
+    const handler = (e: DeviceOrientationEvent) => {
+      if (!containerRef.current) return;
+      const gamma = typeof e.gamma === 'number' ? e.gamma : 0; // left/right, approx -90..90
+      const beta = typeof e.beta === 'number' ? e.beta : 0;   // front/back, approx -180..180
+
+      // Normalize and clamp to [-1,1]
+      const nx = Math.max(-45, Math.min(45, beta)) / 45;   // forward/back maps to X rotation
+      const ny = Math.max(-45, Math.min(45, gamma)) / 45;  // left/right maps to Y rotation
+
+      const rx = -nx * maxRotate;
+      const ry = ny * maxRotate;
+      const tx = ny * (maxTranslate * 0.6);
+      const ty = nx * (maxTranslate * 0.6);
+
+      scheduleApply(rx, ry, tx, ty);
+    };
+
+    orientationHandlerRef.current = handler;
+    window.addEventListener('deviceorientation', handler, true);
+    orientationEnabledRef.current = true;
   }
 
   useEffect(() => {
@@ -218,9 +202,6 @@ function TiltImage({
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       if (orientationHandlerRef.current) {
         window.removeEventListener('deviceorientation', orientationHandlerRef.current, true);
-      }
-      if (motionListenerRef.current) {
-        window.removeEventListener('devicemotion', motionListenerRef.current, true);
       }
     };
   }, []);
@@ -235,21 +216,12 @@ function TiltImage({
       style={{ perspective: '800px' }}
       onPointerMove={onPointerMove}
       onPointerLeave={onPointerLeave}
-      onPointerDown={requestMotionPermission}
-      onClick={requestMotionPermission}
-      onTouchStart={requestMotionPermission}
+      onPointerDown={enableOrientationOnce}
+      onClick={enableOrientationOnce}
+      onTouchStart={enableOrientationOnce}
       tabIndex={tabIndex}
       aria-label={alt}
     >
-      {enableMotionPrompt && !motionReady && (
-        <button
-          type="button"
-          onClick={requestMotionPermission}
-          className="absolute right-2 top-2 z-10 rounded-md bg-black/60 px-2 py-1 text-xs text-white backdrop-blur focus:outline-none"
-        >
-          Enable Motion
-        </button>
-      )}
       <img
         ref={imgRef}
         src={src}
@@ -257,15 +229,18 @@ function TiltImage({
         sizes={sizes}
         alt={alt ?? ''}
         className={[
-          'block w-full h-auto select-none',
-          'transition-transform transition-opacity duration-200 ease-out will-change-transform transform-gpu',
-          loaded ? 'opacity-100 scale-100' : 'opacity-0 scale-[0.98]',
+          'block w-full h-auto select-none bg-neutral-100 dark:bg-neutral-800',
+          'transition-transform transition-opacity transition-[filter] duration-300 ease-out will-change-transform transform-gpu',
+          loaded ? 'opacity-100 scale-100 blur-0' : 'opacity-90 scale-[1.01] blur-md',
           className,
         ].join(' ')}
         loading="lazy"
         decoding="async"
         draggable={false}
-        onLoad={() => setLoaded(true)}
+        onLoad={() => {
+          try { __imgCompleteCache.add(src); } catch {}
+          setLoaded(true);
+        }}
         onError={() => setLoaded(true)}
         fetchPriority={fetchPriority}
       />
@@ -543,33 +518,55 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
           <RevealOnScroll key={`${item.src}-${idx}`} delay={500 + idx * 250}>
             <div className="relative w-full overflow-hidden rounded-md shadow-sm">
               {linkToDetail && item.href ? (
-                <a
-                  href={item.href}
-                  aria-label={item.alt ?? `Open ${idx + 1}`}
-                  className="block h-full w-full"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    openGalleryModal(item);
-                  }}
-                >
-                  <TiltImage
-                    src={item.src}
-                    alt={item.alt ?? `Gallery piece ${idx + 1}`}
-                    className="w-full h-auto max-h-none object-contain"
-                    preload={idx < 3}
-                    fetchPriority={idx === 0 ? 'high' : undefined}
-                  />
-                </a>
+                <>
+                  <a
+                    href={item.href}
+                    aria-label={item.alt ?? `Open ${idx + 1}`}
+                    className="block h-full w-full"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      openGalleryModal(item);
+                    }}
+                  >
+                    <TiltImage
+                      src={item.src}
+                      alt={item.alt ?? `Gallery piece ${idx + 1}`}
+                      className="w-full h-auto max-h-none object-contain"
+                      preload={idx < 3}
+                      fetchPriority={idx === 0 ? 'high' : undefined}
+                    />
+                  </a>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
+                    className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-400 text-white shadow-md ring-1 ring-white/60 hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-white/80"
+                    aria-label={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                    title={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                  >
+                    +
+                  </button>
+                </>
               ) : (
-                <button type="button" onClick={() => openGalleryModal(item)} className="block h-full w-full text-left">
-                  <TiltImage
-                    src={item.src}
-                    alt={item.alt ?? `Gallery piece ${idx + 1}`}
-                    className="w-full h-auto max-h-none object-contain"
-                    preload={idx < 3}
-                    fetchPriority={idx === 0 ? 'high' : undefined}
-                  />
-                </button>
+                <>
+                  <button type="button" onClick={() => openGalleryModal(item)} className="block h-full w-full text-left">
+                    <TiltImage
+                      src={item.src}
+                      alt={item.alt ?? `Gallery piece ${idx + 1}`}
+                      className="w-full h-auto max-h-none object-contain"
+                      preload={idx < 3}
+                      fetchPriority={idx === 0 ? 'high' : undefined}
+                    />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
+                    className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-400 text-white shadow-md ring-1 ring-white/60 hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-white/80"
+                    aria-label={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                    title={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                  >
+                    +
+                  </button>
+                </>
               )}
             </div>
           </RevealOnScroll>
@@ -634,7 +631,6 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                       className="w-full h-auto max-h-[100svh] object-contain cursor-zoom-in"
                       containerClassName="rounded-lg"
                       tabIndex={0}
-                      enableMotionPrompt={true}
                     />
                   </div>
                 ))}
