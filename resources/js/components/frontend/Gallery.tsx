@@ -36,6 +36,7 @@ function TiltImage({
   maxRotate = 8, // degrees
   maxTranslate = 8, // px
   tabIndex,
+  enableMotionPrompt = false,
 }: {
   src: string;
   srcSet?: string;
@@ -48,12 +49,18 @@ function TiltImage({
   maxRotate?: number;
   maxTranslate?: number;
   tabIndex?: number;
+  enableMotionPrompt?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const orientationEnabledRef = useRef<boolean>(false);
   const orientationHandlerRef = useRef<((e: DeviceOrientationEvent) => void) | null>(null);
+  const motionListenerRef = useRef<((e: DeviceMotionEvent) => void) | null>(null);
+  const motionReadyRef = useRef<boolean>(false);
+
+  const [motionReady, setMotionReady] = useState(false);
+  const [motionDenied, setMotionDenied] = useState(false);
 
   // Fade/scale-in when loaded, reset when src changes
   const [loaded, setLoaded] = useState(false);
@@ -123,41 +130,87 @@ function TiltImage({
     scheduleApply(0, 0, 0, 0);
   }
 
-  async function enableOrientationOnce() {
-    if (orientationEnabledRef.current || prefersReducedMotion) return;
-
+  async function requestMotionPermission() {
+    if (motionReadyRef.current || prefersReducedMotion) return;
+    let orientationGranted = false;
+    let motionGranted = false;
+    let orientationTried = false;
+    let motionTried = false;
     try {
-      // iOS permission gate
+      // iOS 13+ permission gate
       // @ts-ignore
       if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        // @ts-ignore
-        const res = await DeviceOrientationEvent.requestPermission();
-        if (res !== 'granted') return;
+        orientationTried = true;
+        try {
+          // @ts-ignore
+          const res = await DeviceOrientationEvent.requestPermission();
+          if (res === 'granted') orientationGranted = true;
+          if (res === 'denied') {
+            setMotionDenied(true);
+            return;
+          }
+        } catch {}
       }
-    } catch {
-      // ignore
+      // @ts-ignore
+      if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+        motionTried = true;
+        try {
+          // @ts-ignore
+          const res = await DeviceMotionEvent.requestPermission();
+          if (res === 'granted') motionGranted = true;
+          if (res === 'denied') {
+            setMotionDenied(true);
+            return;
+          }
+        } catch {}
+      }
+    } catch {}
+    // If neither API exists (non-iOS), or permission granted, continue
+    if (
+      (orientationTried && orientationGranted) ||
+      (motionTried && motionGranted) ||
+      (!orientationTried && !motionTried)
+    ) {
+      // Orientation handler (same as before)
+      const handler = (e: DeviceOrientationEvent) => {
+        if (!containerRef.current) return;
+        const gamma = typeof e.gamma === 'number' ? e.gamma : 0; // left/right, approx -90..90
+        const beta = typeof e.beta === 'number' ? e.beta : 0;   // front/back, approx -180..180
+
+        // Normalize and clamp to [-1,1]
+        const nx = Math.max(-45, Math.min(45, beta)) / 45;   // forward/back maps to X rotation
+        const ny = Math.max(-45, Math.min(45, gamma)) / 45;  // left/right maps to Y rotation
+
+        const rx = -nx * maxRotate;
+        const ry = ny * maxRotate;
+        const tx = ny * (maxTranslate * 0.6);
+        const ty = nx * (maxTranslate * 0.6);
+
+        scheduleApply(rx, ry, tx, ty);
+      };
+      orientationHandlerRef.current = handler;
+      window.addEventListener('deviceorientation', handler, true);
+
+      // DeviceMotion handler
+      const motionHandler = (e: DeviceMotionEvent) => {
+        const ax = (e.accelerationIncludingGravity?.x ?? 0);
+        const ay = (e.accelerationIncludingGravity?.y ?? 0);
+        const nx = Math.max(-9.8, Math.min(9.8, ay)) / 9.8; // forward/back to X rotation
+        const ny = Math.max(-9.8, Math.min(9.8, ax)) / 9.8; // left/right to Y rotation
+        const rx = -nx * maxRotate;
+        const ry = ny * maxRotate;
+        const tx = ny * (maxTranslate * 0.6);
+        const ty = nx * (maxTranslate * 0.6);
+        scheduleApply(rx, ry, tx, ty);
+      };
+      motionListenerRef.current = motionHandler;
+      window.addEventListener('devicemotion', motionHandler, true);
+
+      orientationEnabledRef.current = true;
+      motionReadyRef.current = true;
+      setMotionReady(true);
+      setMotionDenied(false);
     }
-
-    const handler = (e: DeviceOrientationEvent) => {
-      if (!containerRef.current) return;
-      const gamma = typeof e.gamma === 'number' ? e.gamma : 0; // left/right, approx -90..90
-      const beta = typeof e.beta === 'number' ? e.beta : 0;   // front/back, approx -180..180
-
-      // Normalize and clamp to [-1,1]
-      const nx = Math.max(-45, Math.min(45, beta)) / 45;   // forward/back maps to X rotation
-      const ny = Math.max(-45, Math.min(45, gamma)) / 45;  // left/right maps to Y rotation
-
-      const rx = -nx * maxRotate;
-      const ry = ny * maxRotate;
-      const tx = ny * (maxTranslate * 0.6);
-      const ty = nx * (maxTranslate * 0.6);
-
-      scheduleApply(rx, ry, tx, ty);
-    };
-
-    orientationHandlerRef.current = handler;
-    window.addEventListener('deviceorientation', handler, true);
-    orientationEnabledRef.current = true;
   }
 
   useEffect(() => {
@@ -165,6 +218,9 @@ function TiltImage({
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       if (orientationHandlerRef.current) {
         window.removeEventListener('deviceorientation', orientationHandlerRef.current, true);
+      }
+      if (motionListenerRef.current) {
+        window.removeEventListener('devicemotion', motionListenerRef.current, true);
       }
     };
   }, []);
@@ -179,12 +235,21 @@ function TiltImage({
       style={{ perspective: '800px' }}
       onPointerMove={onPointerMove}
       onPointerLeave={onPointerLeave}
-      onPointerDown={enableOrientationOnce}
-      onClick={enableOrientationOnce}
-      onTouchStart={enableOrientationOnce}
+      onPointerDown={requestMotionPermission}
+      onClick={requestMotionPermission}
+      onTouchStart={requestMotionPermission}
       tabIndex={tabIndex}
       aria-label={alt}
     >
+      {enableMotionPrompt && !motionReady && (
+        <button
+          type="button"
+          onClick={requestMotionPermission}
+          className="absolute right-2 top-2 z-10 rounded-md bg-black/60 px-2 py-1 text-xs text-white backdrop-blur focus:outline-none"
+        >
+          Enable Motion
+        </button>
+      )}
       <img
         ref={imgRef}
         src={src}
@@ -569,6 +634,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                       className="w-full h-auto max-h-[100svh] object-contain cursor-zoom-in"
                       containerClassName="rounded-lg"
                       tabIndex={0}
+                      enableMotionPrompt={true}
                     />
                   </div>
                 ))}
