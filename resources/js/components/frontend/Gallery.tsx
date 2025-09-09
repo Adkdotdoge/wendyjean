@@ -513,9 +513,9 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
       <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">Galleries</h2>
       {loading && <div className="mt-6 text-sm opacity-70">Loading galleries…</div>}
       {error && <div className="mt-6 text-sm text-red-600">{error}</div>}
-      <div className="mt-8 grid grid-cols-1 gap-6 md:grid-cols-2">
+      <div className="mt-8 columns-1 md:columns-2 lg:columns-3 [column-gap:1.5rem] [column-fill:_balance]">
         {list.map((item, idx) => (
-          <RevealOnScroll key={`${item.src}-${idx}`} delay={500 + idx * 250}>
+          <RevealOnScroll key={`${item.src}-${idx}`} delay={500 + idx * 250} className="mb-6 inline-block w-full break-inside-avoid">
             <div className="relative w-full overflow-hidden rounded-md shadow-sm">
               {linkToDetail && item.href ? (
                 <>
