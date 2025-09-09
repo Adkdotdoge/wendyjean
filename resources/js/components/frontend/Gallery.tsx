@@ -229,9 +229,9 @@ function TiltImage({
         sizes={sizes}
         alt={alt ?? ''}
         className={[
-          'block w-full h-auto select-none bg-neutral-100 dark:bg-neutral-800',
+          'block w-full h-auto select-none dark:bg-neutral-800',
           'transition-transform transition-opacity transition-[filter] duration-300 ease-out will-change-transform transform-gpu',
-          loaded ? 'opacity-100 scale-100 blur-0' : 'opacity-90 scale-[1.01] blur-md',
+          loaded ? 'opacity-100 scale-100 blur-0' : 'opacity-90 scale-[50] blur-md',
           className,
         ].join(' ')}
         loading="lazy"
