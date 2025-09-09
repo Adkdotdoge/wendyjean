@@ -6,32 +6,13 @@ import { usePage } from '@inertiajs/react';
 
 export type GalleryItem = { src: string; alt?: string; href?: string; all?: string[]; slug?: string; order_column?: number | null; name?: string };
 
-function RevealOnScroll({ children, className = '', delay = 0 }: { children: ReactNode; className?: string; delay?: number }) {
-  const [shown, setShown] = useState(false);
-  useEffect(() => {
-    const id = setTimeout(() => setShown(true), delay);
-    return () => clearTimeout(id);
-  }, [delay]);
-
-  return (
-    <div
-      style={{ transitionDelay: `${delay}ms` }}
-      className={[
-        'transition-all duration-500 ease-out will-change-transform will-change-opacity',
-        shown ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2',
-        className,
-      ].join(' ')}
-    >
-      {children}
-    </div>
-  );
-}
 
 function TiltImage({
   src,
   srcSet,
   sizes,
-  preload = false,
+  eager = true,
+  preload = true,
   fetchPriority,
   alt,
   className = '',
@@ -44,6 +25,7 @@ function TiltImage({
   src: string;
   srcSet?: string;
   sizes?: string;
+  eager?: boolean;
   preload?: boolean;
   fetchPriority?: 'high' | 'low' | 'auto' | undefined;
   alt?: string;
@@ -54,38 +36,14 @@ function TiltImage({
   tabIndex?: number;
   scrollTiltMobile?: boolean;
 }) {
+  // Determine pointer type and adjust intensity accordingly
+  const isCoarse = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  const effectiveMaxTranslate = isCoarse ? maxTranslate : maxTranslate * 1.2;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const rafRef = useRef<number | null>(null);
-  const orientationEnabledRef = useRef<boolean>(false);
-  const orientationHandlerRef = useRef<((e: DeviceOrientationEvent) => void) | null>(null);
   const pointerActiveRef = useRef(false);
 
-  // Fade/scale-in when loaded, reset when src changes
-  const [loaded, setLoaded] = useState(false);
-  useEffect(() => { setLoaded(false); }, [src]);
-
-  // If another instance already loaded/decoded this src, show instantly
-  useEffect(() => {
-    if (!src) return;
-    if (__imgCompleteCache.has(src)) {
-      setLoaded(true);
-      return;
-    }
-    // If a decode is already in-flight, piggyback
-    const inFlight = __imgDecodeCache.get(src);
-    if (inFlight) {
-      inFlight.then(() => setLoaded(true)).catch(() => setLoaded(true));
-      return;
-    }
-  }, [src]);
-
-  // Safety: ensure we reveal even if onLoad never fires (cache/odd responses)
-  useEffect(() => {
-    if (loaded) return;
-    const t = setTimeout(() => setLoaded(true), 800);
-    return () => clearTimeout(t);
-  }, [loaded, src]);
 
   // Optional: inject <link rel="preload" as="image"> for key images
   useEffect(() => {
@@ -102,31 +60,17 @@ function TiltImage({
     };
   }, [preload, src, srcSet, sizes]);
 
-  // Pre-decode kicker: if not loaded and not in cache, start a background decode
-  useEffect(() => {
-    if (!src) return;
-    if (__imgCompleteCache.has(src) || __imgDecodeCache.has(src)) return;
-    // Start a background decode so subsequent instances are instant
-    const img = new Image();
-    img.decoding = 'async';
-    img.loading = 'eager';
-    img.src = src;
-    const p = (img.decode ? img.decode() : Promise.resolve()).catch(() => {});
-    __imgDecodeCache.set(src, p);
-    p.then(() => {
-      __imgCompleteCache.add(src);
-    });
-    return () => {
-      // no cleanup needed; we keep cache entries for session life
-    };
-  }, [src]);
 
   // Gracefully disable for users who prefer reduced motion
   const prefersReducedMotion = typeof window !== 'undefined' &&
     typeof window.matchMedia === 'function' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const isDataSaver = typeof navigator !== 'undefined' && (navigator as any)?.connection?.saveData === true;
+  const isLowEnd = typeof navigator !== 'undefined' && typeof (navigator as any)?.hardwareConcurrency === 'number' && (navigator as any).hardwareConcurrency <= 4;
+  const effectsDisabled = prefersReducedMotion || isDataSaver || isLowEnd;
 
   function applyTransform(rx: number, ry: number, tx: number, ty: number) {
+    if (effectsDisabled) return;
     if (!imgRef.current) return;
     const t = `rotateX(${rx}deg) rotateY(${ry}deg) translate3d(${tx}px, ${ty}px, 0)`;
     imgRef.current.style.transform = t;
@@ -138,11 +82,13 @@ function TiltImage({
   }
 
   function scheduleApply(rx: number, ry: number, tx: number, ty: number) {
+    if (effectsDisabled) return;
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(() => applyTransform(rx, ry, tx, ty));
   }
 
   function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (effectsDisabled) return;
     pointerActiveRef.current = true;
     if (!containerRef.current || prefersReducedMotion) return;
     const rect = containerRef.current.getBoundingClientRect();
@@ -153,22 +99,25 @@ function TiltImage({
 
     const ry = dx * maxRotate;      // left/right -> Y rotation
     const rx = -dy * maxRotate;     // up/down -> X rotation (invert for natural tilt)
-    const tx = dx * maxTranslate;
-    const ty = dy * maxTranslate;
+    const tx = -dx * effectiveMaxTranslate;
+    const ty = -dy * effectiveMaxTranslate;
 
     scheduleApply(rx, ry, tx, ty);
   }
 
   function onPointerLeave() {
+    if (effectsDisabled) return;
     pointerActiveRef.current = false;
     if (prefersReducedMotion) return;
     scheduleApply(0, 0, 0, 0);
   }
 
   function applyScrollTilt() {
+    if (effectsDisabled) return;
     if (!containerRef.current || prefersReducedMotion) return;
     // Avoid fighting with direct pointer control
     if (pointerActiveRef.current) return;
+    // NOTE: With IO removed, always run scroll tilt if pointer not active
     const rect = containerRef.current.getBoundingClientRect();
     const vh = Math.max(window.innerHeight || 0, 1);
     // Use the container center position relative to viewport center
@@ -180,12 +129,13 @@ function TiltImage({
     const rx = -ny * (maxRotate * 0.8);
     const ry = 0;
     const tx = 0;
-    const ty = ny * (maxTranslate * 0.6);
+    const ty = -ny * (maxTranslate * 0.6); // invert to pull toward scroll position
     scheduleApply(rx, ry, tx, ty);
   }
   useEffect(() => {
     if (!scrollTiltMobile) return;
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    if (effectsDisabled) return;
 
     const isCoarse = window.matchMedia('(pointer: coarse)').matches;
     const hasTouch = (navigator as any)?.maxTouchPoints > 0 || 'ontouchstart' in window;
@@ -213,51 +163,11 @@ function TiltImage({
       window.removeEventListener('scroll', onScroll as any);
       window.removeEventListener('resize', onResize as any);
     };
-  }, [scrollTiltMobile, prefersReducedMotion, maxRotate, maxTranslate]);
-
-  async function enableOrientationOnce() {
-    if (orientationEnabledRef.current || prefersReducedMotion) return;
-
-    try {
-      // iOS permission gate
-      // @ts-ignore
-      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        // @ts-ignore
-        const res = await DeviceOrientationEvent.requestPermission();
-        if (res !== 'granted') return;
-      }
-    } catch {
-      // ignore
-    }
-
-    const handler = (e: DeviceOrientationEvent) => {
-      if (!containerRef.current) return;
-      const gamma = typeof e.gamma === 'number' ? e.gamma : 0; // left/right, approx -90..90
-      const beta = typeof e.beta === 'number' ? e.beta : 0;   // front/back, approx -180..180
-
-      // Normalize and clamp to [-1,1]
-      const nx = Math.max(-45, Math.min(45, beta)) / 45;   // forward/back maps to X rotation
-      const ny = Math.max(-45, Math.min(45, gamma)) / 45;  // left/right maps to Y rotation
-
-      const rx = -nx * maxRotate;
-      const ry = ny * maxRotate;
-      const tx = ny * (maxTranslate * 0.6);
-      const ty = nx * (maxTranslate * 0.6);
-
-      scheduleApply(rx, ry, tx, ty);
-    };
-
-    orientationHandlerRef.current = handler;
-    window.addEventListener('deviceorientation', handler, true);
-    orientationEnabledRef.current = true;
-  }
+  }, [scrollTiltMobile, prefersReducedMotion, maxRotate, maxTranslate, effectsDisabled]);
 
   useEffect(() => {
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      if (orientationHandlerRef.current) {
-        window.removeEventListener('deviceorientation', orientationHandlerRef.current, true);
-      }
     };
   }, []);
 
@@ -271,9 +181,6 @@ function TiltImage({
       style={{ perspective: '800px' }}
       onPointerMove={onPointerMove}
       onPointerLeave={onPointerLeave}
-      onPointerDown={enableOrientationOnce}
-      onClick={enableOrientationOnce}
-      onTouchStart={enableOrientationOnce}
       tabIndex={tabIndex}
       aria-label={alt}
     >
@@ -285,18 +192,15 @@ function TiltImage({
         alt={alt ?? ''}
         className={[
           'block w-full h-auto select-none dark:bg-neutral-800',
-          'transition-transform transition-opacity transition-[filter] duration-300 ease-out will-change-transform transform-gpu',
-          loaded ? 'opacity-100 scale-100 blur-0' : 'opacity-90 scale-[1.01] blur-sm',
+          'transform-gpu',
           className,
         ].join(' ')}
-        loading="lazy"
+        loading={eager ? 'eager' : 'lazy'}
         decoding="async"
         draggable={false}
         onLoad={() => {
           try { __imgCompleteCache.add(src); } catch {}
-          setLoaded(true);
         }}
-        onError={() => setLoaded(true)}
         fetchPriority={fetchPriority}
       />
     </div>
@@ -581,122 +485,122 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
         {/* Left column (items at indices 0,2,4,...) */}
         <div className="space-y-6 md:w-1/2">
           {leftCol.map(({ item, i }) => (
-            <RevealOnScroll key={`${item.src}-${i}`} delay={500 + i * 250}>
-              <div className="relative w-full overflow-hidden rounded-md shadow-sm [content-visibility:auto] [contain-intrinsic-size:600px_400px]">
-                {linkToDetail && item.href ? (
-                  <>
-                    <a
-                      href={item.href}
-                      aria-label={item.alt ?? `Open ${i + 1}`}
-                      className="block h-full w-full"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        openGalleryModal(item);
-                      }}
-                    >
-                      <TiltImage
-                        src={item.src}
-                        alt={item.alt ?? `Gallery piece ${i + 1}`}
-                        className="w-full h-auto max-h-none object-contain"
-                        preload={i < 3}
-                        fetchPriority={i === 0 ? 'high' : undefined}
-                      />
-                    </a>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
-                      className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-400 text-white shadow-md ring-1 ring-white/60 hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-white/80"
-                      aria-label={item.alt ? `Open ${item.alt}` : 'Open gallery'}
-                      title={item.alt ? `Open ${item.alt}` : 'Open gallery'}
-                    >
-                      +
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button type="button" onClick={() => openGalleryModal(item)} className="block h-full w-full text-left">
-                      <TiltImage
-                        src={item.src}
-                        alt={item.alt ?? `Gallery piece ${i + 1}`}
-                        className="w-full h-auto max-h-none object-contain"
-                        preload={i < 3}
-                        fetchPriority={i === 0 ? 'high' : undefined}
-                      />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
-                      className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-400 text-white shadow-md ring-1 ring-white/60 hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-white/80"
-                      aria-label={item.alt ? `Open ${item.alt}` : 'Open gallery'}
-                      title={item.alt ? `Open ${item.alt}` : 'Open gallery'}
-                    >
-                      +
-                    </button>
-                  </>
-                )}
-              </div>
-            </RevealOnScroll>
+            <div key={`${item.src}-${i}`} className="relative w-full overflow-hidden rounded-md shadow-sm">
+              {linkToDetail && item.href ? (
+                <>
+                  <a
+                    href={item.href}
+                    aria-label={item.alt ?? `Open ${i + 1}`}
+                    className="block h-full w-full"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      openGalleryModal(item);
+                    }}
+                  >
+                    <TiltImage
+                      src={item.src}
+                      alt={item.alt ?? `Gallery piece ${i + 1}`}
+                      className="w-full h-auto max-h-none object-contain"
+                      eager={i === 0}
+                      preload={i === 0}
+                      fetchPriority={i === 0 ? 'high' : 'low'}
+                    />
+                  </a>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
+                    className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-400 text-white shadow-md ring-1 ring-white/60 hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-white/80"
+                    aria-label={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                    title={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                  >
+                    +
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button type="button" onClick={() => openGalleryModal(item)} className="block h-full w-full text-left">
+                    <TiltImage
+                      src={item.src}
+                      alt={item.alt ?? `Gallery piece ${i + 1}`}
+                      className="w-full h-auto max-h-none object-contain"
+                      eager={i === 0}
+                      preload={i === 0}
+                      fetchPriority={i === 0 ? 'high' : 'low'}
+                    />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
+                    className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-400 text-white shadow-md ring-1 ring-white/60 hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-white/80"
+                    aria-label={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                    title={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                  >
+                    +
+                  </button>
+                </>
+              )}
+            </div>
           ))}
         </div>
 
         {/* Right column (items at indices 1,3,5,...) */}
         <div className="space-y-6 md:w-1/2 mt-6 md:mt-0">
           {rightCol.map(({ item, i }) => (
-            <RevealOnScroll key={`${item.src}-${i}`} delay={500 + i * 250}>
-              <div className="relative w-full overflow-hidden rounded-md shadow-sm [content-visibility:auto] [contain-intrinsic-size:600px_400px]">
-                {linkToDetail && item.href ? (
-                  <>
-                    <a
-                      href={item.href}
-                      aria-label={item.alt ?? `Open ${i + 1}`}
-                      className="block h-full w-full"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        openGalleryModal(item);
-                      }}
-                    >
-                      <TiltImage
-                        src={item.src}
-                        alt={item.alt ?? `Gallery piece ${i + 1}`}
-                        className="w-full h-auto max-h-none object-contain"
-                        preload={i < 3}
-                        fetchPriority={i === 0 ? 'high' : undefined}
-                      />
-                    </a>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
-                      className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-400 text-white shadow-md ring-1 ring-white/60 hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-white/80"
-                      aria-label={item.alt ? `Open ${item.alt}` : 'Open gallery'}
-                      title={item.alt ? `Open ${item.alt}` : 'Open gallery'}
-                    >
-                      +
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button type="button" onClick={() => openGalleryModal(item)} className="block h-full w-full text-left">
-                      <TiltImage
-                        src={item.src}
-                        alt={item.alt ?? `Gallery piece ${i + 1}`}
-                        className="w-full h-auto max-h-none object-contain"
-                        preload={i < 3}
-                        fetchPriority={i === 0 ? 'high' : undefined}
-                      />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
-                      className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-400 text-white shadow-md ring-1 ring-white/60 hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-white/80"
-                      aria-label={item.alt ? `Open ${item.alt}` : 'Open gallery'}
-                      title={item.alt ? `Open ${item.alt}` : 'Open gallery'}
-                    >
-                      +
-                    </button>
-                  </>
-                )}
-              </div>
-            </RevealOnScroll>
+            <div key={`${item.src}-${i}`} className="relative w-full overflow-hidden rounded-md shadow-sm">
+              {linkToDetail && item.href ? (
+                <>
+                  <a
+                    href={item.href}
+                    aria-label={item.alt ?? `Open ${i + 1}`}
+                    className="block h-full w-full"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      openGalleryModal(item);
+                    }}
+                  >
+                    <TiltImage
+                      src={item.src}
+                      alt={item.alt ?? `Gallery piece ${i + 1}`}
+                      className="w-full h-auto max-h-none object-contain"
+                      eager={i === 0}
+                      preload={i === 0}
+                      fetchPriority={i === 0 ? 'high' : 'low'}
+                    />
+                  </a>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
+                    className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-400 text-white shadow-md ring-1 ring-white/60 hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-white/80"
+                    aria-label={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                    title={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                  >
+                    +
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button type="button" onClick={() => openGalleryModal(item)} className="block h-full w-full text-left">
+                    <TiltImage
+                      src={item.src}
+                      alt={item.alt ?? `Gallery piece ${i + 1}`}
+                      className="w-full h-auto max-h-none object-contain"
+                      eager={i === 0}
+                      preload={i === 0}
+                      fetchPriority={i === 0 ? 'high' : 'low'}
+                    />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
+                    className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-400 text-white shadow-md ring-1 ring-white/60 hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-white/80"
+                    aria-label={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                    title={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                  >
+                    +
+                  </button>
+                </>
+              )}
+            </div>
           ))}
         </div>
 
