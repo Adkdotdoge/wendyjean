@@ -44,6 +44,8 @@ function TiltImage({
   const rafRef = useRef<number | null>(null);
   const pointerActiveRef = useRef(false);
 
+  // Local loading state for opacity transition/spinner
+  const [loaded, setLoaded] = useState(false);
 
   // Optional: inject <link rel="preload" as="image"> for key images
   useEffect(() => {
@@ -59,7 +61,6 @@ function TiltImage({
       try { document.head.removeChild(link); } catch {}
     };
   }, [preload, src, srcSet, sizes]);
-
 
   // Gracefully disable for users who prefer reduced motion
   const prefersReducedMotion = typeof window !== 'undefined' &&
@@ -99,8 +100,9 @@ function TiltImage({
 
     const ry = dx * maxRotate;      // left/right -> Y rotation
     const rx = -dy * maxRotate;     // up/down -> X rotation (invert for natural tilt)
-    const tx = -dx * effectiveMaxTranslate;
-    const ty = -dy * effectiveMaxTranslate;
+    // Change: pull toward pointer (positive dx/dy) instead of push away
+    const tx = dx * effectiveMaxTranslate;
+    const ty = dy * effectiveMaxTranslate;
 
     scheduleApply(rx, ry, tx, ty);
   }
@@ -129,7 +131,8 @@ function TiltImage({
     const rx = -ny * (maxRotate * 0.8);
     const ry = 0;
     const tx = 0;
-    const ty = -ny * (maxTranslate * 0.6); // invert to pull toward scroll position
+    // Change: pull with scroll rather than push away
+    const ty = ny * (maxTranslate * 0.6); // pull in the scroll direction
     scheduleApply(rx, ry, tx, ty);
   }
   useEffect(() => {
@@ -176,6 +179,7 @@ function TiltImage({
       ref={containerRef}
       className={[
         'relative will-change-transform',
+        'transition-transform duration-200 ease-out',
         containerClassName,
       ].join(' ')}
       style={{ perspective: '800px' }}
@@ -193,16 +197,26 @@ function TiltImage({
         className={[
           'block w-full h-auto select-none dark:bg-neutral-800',
           'transform-gpu',
+          'transition-transform duration-200 ease-out',
+          'transition-opacity duration-200',
+          loaded ? 'opacity-100' : 'opacity-0',
           className,
         ].join(' ')}
-        loading={eager ? 'eager' : 'lazy'}
+        loading={eager ? 'eager' : 'eager'}
         decoding="async"
         draggable={false}
         onLoad={() => {
           try { __imgCompleteCache.add(src); } catch {}
+          setLoaded(true);
         }}
         fetchPriority={fetchPriority}
       />
+      {!loaded && (
+        <div className="pointer-events-none absolute inset-0 grid place-items-center bg-black/5 dark:bg-white/5">
+          <div className="h-6 w-6 rounded-full border-2 border-neutral-300 border-t-transparent animate-spin" aria-hidden="true" />
+          <span className="sr-only">Loading image…</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -364,6 +378,28 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
   }, [listFromProps, listFromShared, fetched]);
 
   const [leftCol, rightCol] = useMemo(() => {
+  // Preload all unique gallery and modal images when list changes
+  useEffect(() => {
+    // Build a unique set of all image URLs we might need (grid + modal)
+    const urls = new Set<string>();
+    for (const it of list) {
+      if (it?.src) urls.add(String(it.src));
+      if (Array.isArray(it?.all)) for (const u of it.all) if (u) urls.add(String(u));
+    }
+
+    // Fire off background preloads without blocking UI
+    urls.forEach((u) => {
+      if (__imgCompleteCache.has(u)) return; // already loaded
+      if (__imgDecodeCache.has(u)) return;   // already in-flight
+      const p = new Promise<void>((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve();
+        img.onerror = () => resolve();
+        img.src = u;
+      });
+      __imgDecodeCache.set(u, p);
+    });
+  }, [list]);
     const left: Array<{ item: GalleryItem; i: number }> = [];
     const right: Array<{ item: GalleryItem; i: number }> = [];
     list.forEach((item, i) => {
@@ -650,6 +686,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
             ref={modalScrollRef}
             className={[
               'relative z-10 h-full w-full overflow-y-auto overscroll-contain p-4 sm:p-8 transition-all duration-200 ease-out',
+              'will-change-transform will-change-opacity',
               isModalActive ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-1',
             ].join(' ')}
             style={{ WebkitOverflowScrolling: 'touch' } as any}
@@ -657,7 +694,10 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
             <div className="mx-auto max-w-screen-2xl">
               <div className="grid grid-cols-1 place-items-center gap-6">
                 {modalImages.map((src, i) => (
-                  <div key={`${src}-${i}`} className="w-full max-w-3xl mx-auto overflow-hidden rounded-lg">
+                  <div
+                    key={`${src}-${i}`}
+                    className="w-full max-w-3xl mx-auto overflow-hidden rounded-lg transition-opacity duration-200 ease-out"
+                  >
                     <TiltImage
                       src={src}
                       alt={`Gallery image ${i + 1}`}
