@@ -51,26 +51,27 @@ export default function About() {
       <RevealOnScroll>
         {about?.trim() ? (
           <div
-            className="prose prose-neutral dark:prose-invert max-w-none mt-4
-                           prose-headings:font-semibold prose-headings:tracking-tight
-                           prose-h1:mt-0 prose-h2:mt-0 prose-h3:mt-0 prose-h1:mb-2 prose-h2:mb-2 prose-h3:mb-2
-                           prose-h1:whitespace-pre-wrap prose-h2:whitespace-pre-wrap prose-h3:whitespace-pre-wrap
-                           prose-a:underline prose-a:decoration-2 hover:prose-a:decoration-4
-                           prose-img:rounded-lg prose-hr:my-8 prose-pre:border prose-pre:rounded-lg
-                           prose-p:whitespace-pre-wrap prose-li:whitespace-pre-wrap break-words prose-p:mt-1
-                           prose-table:w-full prose-table:my-6 prose-th:text-left prose-td:align-top
-                           prose-blockquote:my-6 prose-blockquote:border-l-4 prose-blockquote:pl-6 prose-blockquote:italic
-                           prose-blockquote:border-neutral-300 dark:prose-blockquote:border-neutral-700
-                           [&>blockquote]:relative [&>blockquote]:pl-6
-                           [&>blockquote:before]:content-['“'] [&>blockquote:before]:absolute [&>blockquote:before]:-left-4
-                           [&>blockquote:before]:text-4xl [&>blockquote:before]:leading-none
-                           [&>blockquote:before]:text-neutral-400 dark:[&>blockquote:before]:text-neutral-500
-                           [&_*[style*='text-align:center']]:text-center
-                           [&_*[style*='text-align:right']]:text-right
-                           [&_*[style*='text-align:justify']]:text-justify
-                           [&>iframe]:w-full [&>iframe]:h-auto [&>iframe]:aspect-video
-                           [&_mark]:rounded [&_mark]:px-1 [&_mark]:bg-yellow-200 dark:[&_mark]:bg-yellow-600/40
-                           [&_*]:whitespace-pre-wrap"
+            className="max-w-none mt-4 text-base leading-7 text-neutral-800 dark:text-neutral-200 break-words
+                       [&_*]:whitespace-pre-wrap
+                       [&_h1]:text-3xl [&_h1]:font-semibold [&_h1]:tracking-tight [&_h1]:mt-0 [&_h1]:mb-2
+                       [&_h2]:text-2xl [&_h2]:font-semibold [&_h2]:tracking-tight [&_h2]:mt-0 [&_h2]:mb-2
+                       [&_h3]:text-xl  [&_h3]:font-semibold [&_h3]:tracking-tight [&_h3]:mt-0 [&_h3]:mb-2
+                       [&_p]:mt-1
+                       [&_a]:underline [&_a]:decoration-2 hover:[&_a]:decoration-4
+                       [&_img]:rounded-lg
+                       [&_hr]:my-8
+                       [&_pre]:border [&_pre]:rounded-lg
+                       [&_table]:w-full [&_table]:my-6 [&_th]:text-left [&_td]:align-top
+                       [&_blockquote]:my-6 [&_blockquote]:border-l-4 [&_blockquote]:pl-6 [&_blockquote]:italic
+                       [&_blockquote]:border-neutral-300 dark:[&_blockquote]:border-neutral-700
+                       [&>blockquote]:relative [&>blockquote]:pl-6
+                       [&>blockquote:before]:content-['“'] [&>blockquote:before]:absolute [&>blockquote:before]:-left-4
+                       [&>blockquote:before]:text-4xl [&>blockquote:before]:leading-none
+                       [&>blockquote:before]:text-neutral-400 dark:[&>blockquote:before]:text-neutral-500
+                       [&_*[style*='text-align:center']]:text-center
+                       [&_*[style*='text-align:right']]:text-right
+                       [&_*[style*='text-align:justify']]:text-justify
+                       [&>iframe]:w-full [&>iframe]:h-auto [&>iframe]:aspect-video"
             dangerouslySetInnerHTML={{ __html: about }}
           />
         ) : null}

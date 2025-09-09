@@ -38,7 +38,9 @@ function TiltImage({
 }) {
   // Determine pointer type and adjust intensity accordingly
   const isCoarse = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
-  const effectiveMaxTranslate = isCoarse ? maxTranslate : maxTranslate * 1.2;
+  // Make desktop a bit subtler, mobile/coarse a bit stronger so it's visible
+  const effectiveMaxRotate = isCoarse ? maxRotate * 1.25 : maxRotate * 0.75;
+  const effectiveMaxTranslate = isCoarse ? maxTranslate * 1.4 : maxTranslate * 0.85;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -100,8 +102,8 @@ function TiltImage({
 
     // Pull toward the pointer: when the pointer is to the right/bottom,
     // lean the image toward it.
-    const ry = -dx * maxRotate;     // invert sign to lean toward pointer
-    const rx =  dy * maxRotate;     // invert sign to lean toward pointer
+    const ry = -dx * effectiveMaxRotate;     // invert sign to lean toward pointer
+    const rx =  dy * effectiveMaxRotate;     // invert sign to lean toward pointer
     const tx =  dx * effectiveMaxTranslate; // translate toward pointer
     const ty =  dy * effectiveMaxTranslate; // translate toward pointer
 
@@ -128,12 +130,13 @@ function TiltImage({
     let ny = ((cy / vh) - 0.5) * 2; // -1 .. 1 (top..bottom)
     // Clamp
     ny = Math.max(-1, Math.min(1, ny));
-    // Pull with scroll: if the image center is lower on the viewport,
-    // lean bottom edge toward the viewer and translate slightly downward.
-    const rx =  ny * (maxRotate * 0.8);
+    // Pull with scroll. Stronger on coarse/mobile so it reads; subtler on desktop.
+    const rotateScale = isCoarse ? 1.1 : 0.6;
+    const translateScale = isCoarse ? 0.9 : 0.5;
+    const rx =  ny * (effectiveMaxRotate * rotateScale);
     const ry =  0;
     const tx =  0;
-    const ty =  ny * (maxTranslate * 0.6);
+    const ty =  ny * (effectiveMaxTranslate * translateScale);
     scheduleApply(rx, ry, tx, ty);
   }
   useEffect(() => {
