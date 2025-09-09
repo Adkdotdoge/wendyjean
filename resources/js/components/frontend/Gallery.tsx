@@ -39,6 +39,7 @@ function TiltImage({
   maxRotate = 8, // degrees
   maxTranslate = 8, // px
   tabIndex,
+  scrollTiltMobile = true,
 }: {
   src: string;
   srcSet?: string;
@@ -51,12 +52,14 @@ function TiltImage({
   maxRotate?: number;
   maxTranslate?: number;
   tabIndex?: number;
+  scrollTiltMobile?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const orientationEnabledRef = useRef<boolean>(false);
   const orientationHandlerRef = useRef<((e: DeviceOrientationEvent) => void) | null>(null);
+  const pointerActiveRef = useRef(false);
 
   // Fade/scale-in when loaded, reset when src changes
   const [loaded, setLoaded] = useState(false);
@@ -140,6 +143,7 @@ function TiltImage({
   }
 
   function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    pointerActiveRef.current = true;
     if (!containerRef.current || prefersReducedMotion) return;
     const rect = containerRef.current.getBoundingClientRect();
     const px = (e.clientX - rect.left) / rect.width; // 0..1
@@ -156,9 +160,48 @@ function TiltImage({
   }
 
   function onPointerLeave() {
+    pointerActiveRef.current = false;
     if (prefersReducedMotion) return;
     scheduleApply(0, 0, 0, 0);
   }
+
+  function applyScrollTilt() {
+    if (!containerRef.current || prefersReducedMotion) return;
+    // Avoid fighting with direct pointer control
+    if (pointerActiveRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const vh = Math.max(window.innerHeight || 0, 1);
+    // Use the container center position relative to viewport center
+    const cy = rect.top + rect.height / 2;
+    let ny = ((cy / vh) - 0.5) * 2; // -1 .. 1 (top..bottom)
+    // Clamp
+    ny = Math.max(-1, Math.min(1, ny));
+    // Subtle scroll tilt
+    const rx = -ny * (maxRotate * 0.6);
+    const ry = 0;
+    const tx = 0;
+    const ty = ny * (maxTranslate * 0.4);
+    scheduleApply(rx, ry, tx, ty);
+  }
+  useEffect(() => {
+    if (!scrollTiltMobile) return;
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const isCoarse = window.matchMedia('(pointer: coarse)').matches;
+    if (!isCoarse) return; // only on touch/mobile-like devices
+
+    const onScroll = () => applyScrollTilt();
+    const onResize = () => applyScrollTilt();
+
+    // Kick once on mount so offscreen items get a stable transform
+    requestAnimationFrame(() => applyScrollTilt());
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('scroll', onScroll as any);
+      window.removeEventListener('resize', onResize as any);
+    };
+  }, [scrollTiltMobile, prefersReducedMotion, maxRotate, maxTranslate]);
 
   async function enableOrientationOnce() {
     if (orientationEnabledRef.current || prefersReducedMotion) return;
@@ -404,6 +447,15 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
     });
   }, [listFromProps, listFromShared, fetched]);
 
+  const [leftCol, rightCol] = useMemo(() => {
+    const left: Array<{ item: GalleryItem; i: number }> = [];
+    const right: Array<{ item: GalleryItem; i: number }> = [];
+    list.forEach((item, i) => {
+      (i % 2 === 0 ? left : right).push({ item, i });
+    });
+    return [left, right] as const;
+  }, [list]);
+
   async function openGalleryModal(item: GalleryItem) {
     const fallbackImgs = Array.isArray(item.all) && item.all.length > 0 ? item.all : [item.src];
     setModalImages(fallbackImgs);
@@ -513,64 +565,129 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
       <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">Galleries</h2>
       {loading && <div className="mt-6 text-sm opacity-70">Loading galleries…</div>}
       {error && <div className="mt-6 text-sm text-red-600">{error}</div>}
-      <div className="mt-8 columns-1 md:columns-2 lg:columns-3 [column-gap:1.5rem] [column-fill:_balance]">
-        {list.map((item, idx) => (
-          <RevealOnScroll key={`${item.src}-${idx}`} delay={500 + idx * 250} className="mb-6 inline-block w-full break-inside-avoid">
-            <div className="relative w-full overflow-hidden rounded-md shadow-sm">
-              {linkToDetail && item.href ? (
-                <>
-                  <a
-                    href={item.href}
-                    aria-label={item.alt ?? `Open ${idx + 1}`}
-                    className="block h-full w-full"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      openGalleryModal(item);
-                    }}
-                  >
-                    <TiltImage
-                      src={item.src}
-                      alt={item.alt ?? `Gallery piece ${idx + 1}`}
-                      className="w-full h-auto max-h-none object-contain"
-                      preload={idx < 3}
-                      fetchPriority={idx === 0 ? 'high' : undefined}
-                    />
-                  </a>
-                  <button
-                    type="button"
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
-                    className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-400 text-white shadow-md ring-1 ring-white/60 hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-white/80"
-                    aria-label={item.alt ? `Open ${item.alt}` : 'Open gallery'}
-                    title={item.alt ? `Open ${item.alt}` : 'Open gallery'}
-                  >
-                    +
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button type="button" onClick={() => openGalleryModal(item)} className="block h-full w-full text-left">
-                    <TiltImage
-                      src={item.src}
-                      alt={item.alt ?? `Gallery piece ${idx + 1}`}
-                      className="w-full h-auto max-h-none object-contain"
-                      preload={idx < 3}
-                      fetchPriority={idx === 0 ? 'high' : undefined}
-                    />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
-                    className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-400 text-white shadow-md ring-1 ring-white/60 hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-white/80"
-                    aria-label={item.alt ? `Open ${item.alt}` : 'Open gallery'}
-                    title={item.alt ? `Open ${item.alt}` : 'Open gallery'}
-                  >
-                    +
-                  </button>
-                </>
-              )}
-            </div>
-          </RevealOnScroll>
-        ))}
+      <div className="mt-8 md:flex md:gap-6">
+        {/* Left column (items at indices 0,2,4,...) */}
+        <div className="space-y-6 md:w-1/2">
+          {leftCol.map(({ item, i }) => (
+            <RevealOnScroll key={`${item.src}-${i}`} delay={500 + i * 250}>
+              <div className="relative w-full overflow-hidden rounded-md shadow-sm">
+                {linkToDetail && item.href ? (
+                  <>
+                    <a
+                      href={item.href}
+                      aria-label={item.alt ?? `Open ${i + 1}`}
+                      className="block h-full w-full"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        openGalleryModal(item);
+                      }}
+                    >
+                      <TiltImage
+                        src={item.src}
+                        alt={item.alt ?? `Gallery piece ${i + 1}`}
+                        className="w-full h-auto max-h-none object-contain"
+                        preload={i < 3}
+                        fetchPriority={i === 0 ? 'high' : undefined}
+                      />
+                    </a>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
+                      className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-400 text-white shadow-md ring-1 ring-white/60 hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-white/80"
+                      aria-label={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                      title={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                    >
+                      +
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button type="button" onClick={() => openGalleryModal(item)} className="block h-full w-full text-left">
+                      <TiltImage
+                        src={item.src}
+                        alt={item.alt ?? `Gallery piece ${i + 1}`}
+                        className="w-full h-auto max-h-none object-contain"
+                        preload={i < 3}
+                        fetchPriority={i === 0 ? 'high' : undefined}
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
+                      className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-400 text-white shadow-md ring-1 ring-white/60 hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-white/80"
+                      aria-label={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                      title={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                    >
+                      +
+                    </button>
+                  </>
+                )}
+              </div>
+            </RevealOnScroll>
+          ))}
+        </div>
+
+        {/* Right column (items at indices 1,3,5,...) */}
+        <div className="space-y-6 md:w-1/2 mt-6 md:mt-0">
+          {rightCol.map(({ item, i }) => (
+            <RevealOnScroll key={`${item.src}-${i}`} delay={500 + i * 250}>
+              <div className="relative w-full overflow-hidden rounded-md shadow-sm">
+                {linkToDetail && item.href ? (
+                  <>
+                    <a
+                      href={item.href}
+                      aria-label={item.alt ?? `Open ${i + 1}`}
+                      className="block h-full w-full"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        openGalleryModal(item);
+                      }}
+                    >
+                      <TiltImage
+                        src={item.src}
+                        alt={item.alt ?? `Gallery piece ${i + 1}`}
+                        className="w-full h-auto max-h-none object-contain"
+                        preload={i < 3}
+                        fetchPriority={i === 0 ? 'high' : undefined}
+                      />
+                    </a>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
+                      className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-400 text-white shadow-md ring-1 ring-white/60 hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-white/80"
+                      aria-label={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                      title={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                    >
+                      +
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button type="button" onClick={() => openGalleryModal(item)} className="block h-full w-full text-left">
+                      <TiltImage
+                        src={item.src}
+                        alt={item.alt ?? `Gallery piece ${i + 1}`}
+                        className="w-full h-auto max-h-none object-contain"
+                        preload={i < 3}
+                        fetchPriority={i === 0 ? 'high' : undefined}
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
+                      className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-400 text-white shadow-md ring-1 ring-white/60 hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-white/80"
+                      aria-label={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                      title={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                    >
+                      +
+                    </button>
+                  </>
+                )}
+              </div>
+            </RevealOnScroll>
+          ))}
+        </div>
+
         {!loading && list.length === 0 && (
           <div className="text-sm text-muted-foreground">No galleries to display yet.</div>
         )}
