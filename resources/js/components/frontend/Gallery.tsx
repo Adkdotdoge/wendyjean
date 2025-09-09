@@ -177,23 +177,35 @@ function TiltImage({
     // Clamp
     ny = Math.max(-1, Math.min(1, ny));
     // Subtle scroll tilt
-    const rx = -ny * (maxRotate * 0.6);
+    const rx = -ny * (maxRotate * 0.8);
     const ry = 0;
     const tx = 0;
-    const ty = ny * (maxTranslate * 0.4);
+    const ty = ny * (maxTranslate * 0.6);
     scheduleApply(rx, ry, tx, ty);
   }
   useEffect(() => {
     if (!scrollTiltMobile) return;
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+
     const isCoarse = window.matchMedia('(pointer: coarse)').matches;
-    if (!isCoarse) return; // only on touch/mobile-like devices
+    const hasTouch = (navigator as any)?.maxTouchPoints > 0 || 'ontouchstart' in window;
+    if (!isCoarse && !hasTouch) return; // only on touch/mobile-like devices
 
-    const onScroll = () => applyScrollTilt();
-    const onResize = () => applyScrollTilt();
+    let ticking = false;
+    const onTick = () => {
+      ticking = false;
+      applyScrollTilt();
+    };
+    const onScroll = () => {
+      if (!ticking) {
+        ticking = true;
+        requestAnimationFrame(onTick);
+      }
+    };
+    const onResize = onScroll;
 
-    // Kick once on mount so offscreen items get a stable transform
-    requestAnimationFrame(() => applyScrollTilt());
+    // Initial kick so items get a transform without waiting for first scroll
+    requestAnimationFrame(onTick);
 
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', onResize);
@@ -274,7 +286,7 @@ function TiltImage({
         className={[
           'block w-full h-auto select-none dark:bg-neutral-800',
           'transition-transform transition-opacity transition-[filter] duration-300 ease-out will-change-transform transform-gpu',
-          loaded ? 'opacity-100 scale-100 blur-0' : 'opacity-90 scale-[50] blur-md',
+          loaded ? 'opacity-100 scale-100 blur-0' : 'opacity-90 scale-[1.01] blur-sm',
           className,
         ].join(' ')}
         loading="lazy"
@@ -570,7 +582,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
         <div className="space-y-6 md:w-1/2">
           {leftCol.map(({ item, i }) => (
             <RevealOnScroll key={`${item.src}-${i}`} delay={500 + i * 250}>
-              <div className="relative w-full overflow-hidden rounded-md shadow-sm">
+              <div className="relative w-full overflow-hidden rounded-md shadow-sm [content-visibility:auto] [contain-intrinsic-size:600px_400px]">
                 {linkToDetail && item.href ? (
                   <>
                     <a
@@ -631,7 +643,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
         <div className="space-y-6 md:w-1/2 mt-6 md:mt-0">
           {rightCol.map(({ item, i }) => (
             <RevealOnScroll key={`${item.src}-${i}`} delay={500 + i * 250}>
-              <div className="relative w-full overflow-hidden rounded-md shadow-sm">
+              <div className="relative w-full overflow-hidden rounded-md shadow-sm [content-visibility:auto] [contain-intrinsic-size:600px_400px]">
                 {linkToDetail && item.href ? (
                   <>
                     <a
