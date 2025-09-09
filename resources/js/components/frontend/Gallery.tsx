@@ -98,11 +98,12 @@ function TiltImage({
     const dx = (px - 0.5) * 2; // -1..1
     const dy = (py - 0.5) * 2; // -1..1
 
-    const ry = dx * maxRotate;      // left/right -> Y rotation
-    const rx = -dy * maxRotate;     // up/down -> X rotation (invert for natural tilt)
-    // Change: pull toward pointer (positive dx/dy) instead of push away
-    const tx = dx * effectiveMaxTranslate;
-    const ty = dy * effectiveMaxTranslate;
+    // Pull toward the pointer: when the pointer is to the right/bottom,
+    // lean the image toward it.
+    const ry = -dx * maxRotate;     // invert sign to lean toward pointer
+    const rx =  dy * maxRotate;     // invert sign to lean toward pointer
+    const tx =  dx * effectiveMaxTranslate; // translate toward pointer
+    const ty =  dy * effectiveMaxTranslate; // translate toward pointer
 
     scheduleApply(rx, ry, tx, ty);
   }
@@ -127,12 +128,12 @@ function TiltImage({
     let ny = ((cy / vh) - 0.5) * 2; // -1 .. 1 (top..bottom)
     // Clamp
     ny = Math.max(-1, Math.min(1, ny));
-    // Subtle scroll tilt
-    const rx = -ny * (maxRotate * 0.8);
-    const ry = 0;
-    const tx = 0;
-    // Change: pull with scroll rather than push away
-    const ty = ny * (maxTranslate * 0.6); // pull in the scroll direction
+    // Pull with scroll: if the image center is lower on the viewport,
+    // lean bottom edge toward the viewer and translate slightly downward.
+    const rx =  ny * (maxRotate * 0.8);
+    const ry =  0;
+    const tx =  0;
+    const ty =  ny * (maxTranslate * 0.6);
     scheduleApply(rx, ry, tx, ty);
   }
   useEffect(() => {
@@ -140,9 +141,7 @@ function TiltImage({
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
     if (effectsDisabled) return;
 
-    const isCoarse = window.matchMedia('(pointer: coarse)').matches;
-    const hasTouch = (navigator as any)?.maxTouchPoints > 0 || 'ontouchstart' in window;
-    if (!isCoarse && !hasTouch) return; // only on touch/mobile-like devices
+    // Run on all devices; pointer movement will override when active.
 
     let ticking = false;
     const onTick = () => {
@@ -377,20 +376,18 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
     });
   }, [listFromProps, listFromShared, fetched]);
 
-  const [leftCol, rightCol] = useMemo(() => {
   // Preload all unique gallery and modal images when list changes
   useEffect(() => {
-    // Build a unique set of all image URLs we might need (grid + modal)
     const urls = new Set<string>();
     for (const it of list) {
       if (it?.src) urls.add(String(it.src));
-      if (Array.isArray(it?.all)) for (const u of it.all) if (u) urls.add(String(u));
+      if (Array.isArray(it?.all)) {
+        for (const u of it.all) if (u) urls.add(String(u));
+      }
     }
-
-    // Fire off background preloads without blocking UI
     urls.forEach((u) => {
-      if (__imgCompleteCache.has(u)) return; // already loaded
-      if (__imgDecodeCache.has(u)) return;   // already in-flight
+      if (__imgCompleteCache.has(u)) return;
+      if (__imgDecodeCache.has(u)) return;
       const p = new Promise<void>((resolve) => {
         const img = new Image();
         img.onload = () => resolve();
@@ -400,6 +397,8 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
       __imgDecodeCache.set(u, p);
     });
   }, [list]);
+
+  const [leftCol, rightCol] = useMemo(() => {
     const left: Array<{ item: GalleryItem; i: number }> = [];
     const right: Array<{ item: GalleryItem; i: number }> = [];
     list.forEach((item, i) => {
