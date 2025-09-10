@@ -32,6 +32,7 @@ function TiltImage({
   sources,
   placeholder,
   onLoadComplete,
+  disableSkeleton,
   eager = true,
   preload = true,
   fetchPriority,
@@ -49,6 +50,7 @@ function TiltImage({
   sources?: Array<{ type: string; srcSet: string; sizes?: string }>;
   placeholder?: string | null;
   onLoadComplete?: () => void;
+  disableSkeleton?: boolean;
   eager?: boolean;
   preload?: boolean;
   fetchPriority?: 'high' | 'low' | 'auto' | undefined;
@@ -280,8 +282,10 @@ function TiltImage({
       )}
       {!loaded && (
         <div className="pointer-events-none absolute inset-0 grid place-items-center">
-          {/* static skeleton to reduce CPU on mobile; hide if we have a placeholder */}
-          {!placeholder && <div className="absolute inset-0 bg-neutral-200/70 dark:bg-neutral-800/70" />}
+          {/* static skeleton to reduce CPU on mobile; hide if we have a placeholder or when disabled */}
+          {!placeholder && !disableSkeleton && (
+            <div className="absolute inset-0 bg-neutral-200/70 dark:bg-neutral-800/70" />
+          )}
           <div className="relative h-6 w-6 rounded-full border-2 border-neutral-300 border-t-transparent animate-spin" aria-hidden="true" />
           <span className="sr-only">Loading image…</span>
         </div>
@@ -985,34 +989,6 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
             style={{ WebkitOverflowScrolling: 'touch' } as any}
           >
             <div className="mx-auto max-w-screen-2xl">
-              {(modalTitle || modalDescription) && (
-                <div className="mx-auto mb-6 max-w-3xl text-center">
-                  {modalTitle && (
-                    <h3 className="text-lg font-semibold text-white/95 dark:text-white">{modalTitle}</h3>
-                  )}
-                  {modalDescription && (
-                    <>
-                      <p
-                        className="mt-2 text-sm text-white/85 dark:text-white/80"
-                        style={{ display: '-webkit-box', WebkitLineClamp: 3 as any, WebkitBoxOrient: 'vertical' as any, overflow: 'hidden' }}
-                      >
-                        {modalDescription}
-                      </p>
-                      {modalSlug && (
-                        <div className="mt-3">
-                          <Link
-                            href={`/galleries/${modalSlug}`}
-                            className="inline-flex items-center gap-1 rounded-md bg-white/10 px-3 py-1.5 text-sm text-white hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/40"
-                          >
-                            Read more
-                            <span aria-hidden>→</span>
-                          </Link>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
               <div className="grid grid-cols-1 place-items-center gap-6">
                 {modalImages.map((src, i) => (
                   <div
@@ -1022,13 +998,37 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                     <TiltImage
                       src={src}
                       alt={`Gallery image ${i + 1}`}
-                      className="w-full h-auto max-h-[100svh] object-contain cursor-zoom-in"
+                      className="w-full h-auto max-h-[100svh] object-contain cursor-zoom-in bg-transparent dark:bg-transparent"
                       containerClassName="rounded-lg"
                       eager={i === 0}
                       fetchPriority={i === 0 ? 'high' : 'low'}
                       sizes="100vw"
+                      disableSkeleton
                       tabIndex={0}
                     />
+                    {i === 0 && (modalTitle || modalDescription) && (
+                      <div className="mx-auto mt-3 max-w-3xl text-left">
+                        {modalTitle && (
+                          <h3 className="text-base font-semibold text-white/95 dark:text-white">{modalTitle}</h3>
+                        )}
+                        {modalDescription && (
+                          <div className="mt-2 whitespace-pre-wrap text-sm text-white/85 dark:text-white/80">
+                            {modalDescription}
+                          </div>
+                        )}
+                        {modalSlug && (
+                          <div className="mt-3">
+                            <Link
+                              href={`/galleries/${modalSlug}`}
+                              className="inline-flex items-center gap-1 rounded-md bg-white/10 px-3 py-1.5 text-sm text-white hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/40"
+                            >
+                              Read more
+                              <span aria-hidden>→</span>
+                            </Link>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
