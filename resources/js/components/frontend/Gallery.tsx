@@ -89,7 +89,8 @@ function TiltImage({
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const isDataSaver = typeof navigator !== 'undefined' && (navigator as any)?.connection?.saveData === true;
   const isLowEnd = typeof navigator !== 'undefined' && typeof (navigator as any)?.hardwareConcurrency === 'number' && (navigator as any).hardwareConcurrency <= 4;
-  const effectsDisabled = prefersReducedMotion || isDataSaver || isLowEnd;
+  // Disable tilt entirely on mobile/coarse pointers to save main-thread time
+  const effectsDisabled = prefersReducedMotion || isDataSaver || isLowEnd || isCoarse;
 
   function applyTransform(rx: number, ry: number, tx: number, ty: number) {
     if (effectsDisabled) return;
@@ -494,7 +495,16 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
     setModalSlug(item.slug ?? null);
     requestAnimationFrame(() => setIsModalActive(true));
 
-    if (!item.slug || !endpoint) return;
+    // If we already have multiple images, don’t fetch details immediately.
+    if (!item.slug || !endpoint || (Array.isArray(item.all) && item.all.length > 1)) return;
+
+    // Avoid detail fetch on slow/mobile connections
+    const nav: any = typeof navigator !== 'undefined' ? navigator : {};
+    const conn: any = nav.connection || nav.mozConnection || nav.webkitConnection;
+    const saveData = !!conn?.saveData;
+    const effective = String(conn?.effectiveType || '').toLowerCase();
+    const slow = saveData || effective.includes('2g') || effective.includes('3g');
+    if (slow || isCoarse) return;
 
     try {
       setModalLoading(true);
@@ -611,7 +621,12 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
             <div
               key={`${item.src}-${i}`}
               className="relative w-full overflow-hidden rounded-md shadow-sm bg-neutral-100 dark:bg-neutral-900"
-              style={{ contentVisibility: 'auto', containIntrinsicSize: '480px' } as any}
+              style={{
+                contentVisibility: 'auto',
+                containIntrinsicSize: '480px',
+                // Reserve space based on known aspect ratio if available
+                aspectRatio: (item.primary?.width && item.primary?.height) ? `${item.primary.width} / ${item.primary.height}` : undefined,
+              } as any}
             >
               {linkToDetail && item.href ? (
                 <>
@@ -686,7 +701,11 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
             <div
               key={`${item.src}-${i}`}
               className="relative w-full overflow-hidden rounded-md shadow-sm bg-neutral-100 dark:bg-neutral-900"
-              style={{ contentVisibility: 'auto', containIntrinsicSize: '480px' } as any}
+              style={{
+                contentVisibility: 'auto',
+                containIntrinsicSize: '480px',
+                aspectRatio: (item.primary?.width && item.primary?.height) ? `${item.primary.width} / ${item.primary.height}` : undefined,
+              } as any}
             >
               {linkToDetail && item.href ? (
                 <>
@@ -836,6 +855,9 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                       alt={`Gallery image ${i + 1}`}
                       className="w-full h-auto max-h-[100svh] object-contain cursor-zoom-in"
                       containerClassName="rounded-lg"
+                      eager={i === 0}
+                      fetchPriority={i === 0 ? 'high' : 'low'}
+                      sizes="100vw"
                       tabIndex={0}
                     />
                   </div>
