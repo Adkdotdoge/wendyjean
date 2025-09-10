@@ -58,8 +58,8 @@ function TiltImage({
   // Determine pointer type and adjust intensity accordingly
   const isCoarse = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
   // Make desktop a bit subtler, mobile/coarse a bit stronger so it's visible
-  const effectiveMaxRotate = isCoarse ? maxRotate * 1.6 : maxRotate * 0.8;
-  const effectiveMaxTranslate = isCoarse ? maxTranslate * 1.2 : maxTranslate * 0.8;
+  const effectiveMaxRotate = isCoarse ? maxRotate * 1.0 : maxRotate * 0.75;
+  const effectiveMaxTranslate = isCoarse ? maxTranslate * 0.9 : maxTranslate * 0.8;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -150,8 +150,8 @@ function TiltImage({
     // Clamp
     ny = Math.max(-1, Math.min(1, ny));
     // Pull with scroll. Stronger on coarse/mobile so it reads; subtler on desktop.
-    const rotateScale = isCoarse ? 1.6 : 0.7;
-    const translateScale = isCoarse ? 1.0 : 0.6;
+    const rotateScale = isCoarse ? 1.0 : 0.6;
+    const translateScale = isCoarse ? 0.8 : 0.5;
     const rx =  ny * (effectiveMaxRotate * rotateScale);
     const ry =  0;
     const tx =  0;
@@ -265,8 +265,8 @@ function TiltImage({
       )}
       {!loaded && (
         <div className="pointer-events-none absolute inset-0 grid place-items-center">
-          {/* soft skeleton background to signal loading */}
-          <div className="absolute inset-0 animate-pulse bg-neutral-200/70 dark:bg-neutral-800/70" />
+          {/* static skeleton to reduce CPU on mobile */}
+          <div className="absolute inset-0 bg-neutral-200/70 dark:bg-neutral-800/70" />
           <div className="relative h-6 w-6 rounded-full border-2 border-neutral-300 border-t-transparent animate-spin" aria-hidden="true" />
           <span className="sr-only">Loading image…</span>
         </div>
@@ -448,14 +448,20 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
     });
   }, [listFromProps, listFromShared, fetched]);
 
-  // Preload all unique gallery and modal images when list changes
+  // Preload a small subset of images on faster connections only
   useEffect(() => {
-    const urls = new Set<string>();
-    for (const it of list) {
-      if (it?.src) urls.add(String(it.src));
-      if (Array.isArray(it?.all)) {
-        for (const u of it.all) if (u) urls.add(String(u));
-      }
+    const nav: any = typeof navigator !== 'undefined' ? navigator : {};
+    const conn: any = nav.connection || nav.mozConnection || nav.webkitConnection;
+    const saveData = !!conn?.saveData;
+    const effective = String(conn?.effectiveType || '').toLowerCase();
+    const slow = saveData || effective.includes('2g') || effective.includes('3g');
+    const isCoarse = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    if (slow || isCoarse) return; // don’t preload on mobile/slow connections
+
+    const urls: string[] = [];
+    for (let i = 0; i < Math.min(list.length, 6); i++) {
+      const it = list[i];
+      if (it?.src) urls.push(String(it.src));
     }
     urls.forEach((u) => {
       if (__imgCompleteCache.has(u)) return;

@@ -94,12 +94,7 @@ export default function Welcome() {
           href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600"
           rel="stylesheet"
         />
-        {heroSrc && (
-          <link rel="preload" as="image" href={heroSrc} media="(prefers-color-scheme: light)" />
-        )}
-        {heroDarkSrc && (
-          <link rel="preload" as="image" href={heroDarkSrc} media="(prefers-color-scheme: dark)" />
-        )}
+        {/* Avoid preloading huge hero images on mobile; rely on normal load */}
       </Head>
 
       <FrontendLayout useAnchors>

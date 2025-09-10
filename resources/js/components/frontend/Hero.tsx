@@ -1,4 +1,4 @@
-import { Head, usePage } from '@inertiajs/react';
+import { usePage } from '@inertiajs/react';
 
 export default function Hero() {
   const { settings } = usePage<{ settings?: { heroUrl?: string | null; appName?: string | null; about?: string | null } }>().props;
@@ -23,11 +23,6 @@ export default function Hero() {
       className="relative flex min-h-screen w-full items-center justify-center pt-16 bg-gray-200 dark:bg-neutral-800"
       style={src ? { backgroundImage: `url('${src}')`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}
     >
-      <Head>
-        {src ? (
-          <link rel="preload" as="image" href={src} />
-        ) : null}
-      </Head>
       <div className="mx-auto max-w-4xl px-6 text-center">
         <h1 className="text-4xl font-semibold tracking-tight text-white dark:text-sky-950 md:text-6xl drop-shadow-2xl drop-shadow-black dark:drop-shadow-white">
           {appName}
