@@ -264,8 +264,10 @@ function TiltImage({
         />
       )}
       {!loaded && (
-        <div className="pointer-events-none absolute inset-0 grid place-items-center bg-black/5 dark:bg-white/5">
-          <div className="h-6 w-6 rounded-full border-2 border-neutral-300 border-t-transparent animate-spin" aria-hidden="true" />
+        <div className="pointer-events-none absolute inset-0 grid place-items-center">
+          {/* soft skeleton background to signal loading */}
+          <div className="absolute inset-0 animate-pulse bg-neutral-200/70 dark:bg-neutral-800/70" />
+          <div className="relative h-6 w-6 rounded-full border-2 border-neutral-300 border-t-transparent animate-spin" aria-hidden="true" />
           <span className="sr-only">Loading image…</span>
         </div>
       )}
@@ -602,7 +604,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
           {leftCol.map(({ item, i }) => (
             <div
               key={`${item.src}-${i}`}
-              className="relative w-full overflow-hidden rounded-md shadow-sm"
+              className="relative w-full overflow-hidden rounded-md shadow-sm bg-neutral-100 dark:bg-neutral-900"
               style={{ contentVisibility: 'auto', containIntrinsicSize: '480px' } as any}
             >
               {linkToDetail && item.href ? (
@@ -677,7 +679,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
           {rightCol.map(({ item, i }) => (
             <div
               key={`${item.src}-${i}`}
-              className="relative w-full overflow-hidden rounded-md shadow-sm"
+              className="relative w-full overflow-hidden rounded-md shadow-sm bg-neutral-100 dark:bg-neutral-900"
               style={{ contentVisibility: 'auto', containIntrinsicSize: '480px' } as any}
             >
               {linkToDetail && item.href ? (

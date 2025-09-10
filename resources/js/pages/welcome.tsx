@@ -19,7 +19,20 @@ type PageProps = SharedData & {
     hero_dark_url?: string | null;
     images_urls?: string[] | null;
   } | null;
-  galleries?: { name: string; slug?: string | null; id?: number; primary_url?: string | null; alt_text?: string | null }[] | null;
+  galleries?: ({
+    name: string;
+    slug?: string | null;
+    id?: number;
+    primary_url?: string | null;
+    alt_text?: string | null;
+    primary?: {
+      src?: string | null;
+      srcset?: { webp?: string | null; jpg?: string | null; avif?: string | null } | null;
+      sizes?: string | null;
+      width?: number | null;
+      height?: number | null;
+    } | null;
+  })[] | null;
 };
 
 // Normalize image paths: accept absolute URLs, "/..." root paths, or storage-relative paths like
@@ -59,10 +72,10 @@ export default function Welcome() {
         alt: g.alt_text ?? g.name,
         slug: g.slug ?? undefined,
         name: g.name,
-        primary: g.primary ? {
-          src: normalizeSrc(g.primary.src)!,
-          srcset: g.primary.srcset,
-          sizes: g.primary.sizes,
+        primary: g.primary && g.primary.src ? {
+          src: normalizeSrc(g.primary.src) ?? src,
+          srcset: g.primary.srcset ?? undefined,
+          sizes: g.primary.sizes ?? undefined,
           width: g.primary.width ?? null,
           height: g.primary.height ?? null,
         } : undefined,
