@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, usePage } from '@inertiajs/react';
 import { Menu, X, Sun, Moon } from 'lucide-react';
 import { Icon } from '@/components/icon'; // your wrapper
+import { useAppearance } from '@/hooks/use-appearance';
 
 type NavLink = {
   label: string;
@@ -16,7 +17,7 @@ type NavbarProps = {
 };
 
 export default function Navbar({
-  brand = { label: 'WendyJean', href: '#hero' },
+  brand,
   links = [
     { label: 'Home', href: '#hero' },
     { label: 'About', href: '#about' },
@@ -27,10 +28,12 @@ export default function Navbar({
 }: NavbarProps) {
   const [open, setOpen] = useState(false);
 
-  // Theme (light/dark) state
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const { appearance, updateAppearance } = useAppearance();
 
   const page = usePage();
+  const settings = page.props.settings as { appName?: string };
+  const brandLabel = brand?.label ?? settings?.appName ?? 'App';
+  const brandHref = brand?.href ?? '#hero';
   const current = (page.url || '').split('?')[0];
 
   // Close mobile menu on route change
@@ -38,32 +41,10 @@ export default function Navbar({
     setOpen(false);
   }, [current]);
 
-  // Initialize theme from localStorage or system preference
-  useEffect(() => {
-    const root = document.documentElement;
-    const stored = (localStorage.getItem('theme') as 'light' | 'dark' | null);
-    const preferred: 'light' | 'dark' =
-      stored ?? (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-
-    if (preferred === 'dark') {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
-    setTheme(preferred);
-  }, []);
-
-  const toggleTheme = () => {
-    const next: 'light' | 'dark' = theme === 'dark' ? 'light' : 'dark';
-    const root = document.documentElement;
-    if (next === 'dark') {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
-    localStorage.setItem('theme', next);
-    setTheme(next);
-  };
+  const isDark = typeof document !== 'undefined'
+    ? document.documentElement.classList.contains('dark')
+    : appearance === 'dark';
+  const toggleTheme = () => updateAppearance(isDark ? 'light' : 'dark');
 
   const baseLink =
     'inline-flex items-center py-2 px-3 rounded-md text-sm font-medium transition';
@@ -100,10 +81,10 @@ export default function Navbar({
             </button>
 
             <Link
-              href={brand.href ?? '#hero'}
+              href={brandHref}
               className="text-lg font-semibold tracking-tight hover:opacity-90"
             >
-              {brand.label}
+              {brandLabel}
             </Link>
           </div>
 
@@ -140,12 +121,12 @@ export default function Navbar({
             <button
               type="button"
               onClick={toggleTheme}
-              aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+              aria-label={`Switch to ${isDark ? 'light' : 'dark'} mode`}
               className={`${baseLink} ${inactive} gap-2`}
-              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
             >
-              <Icon iconNode={theme === 'dark' ? Sun : Moon} />
-              <span className="hidden sm:inline">{theme === 'dark' ? 'Light' : 'Dark'}</span>
+              <Icon iconNode={isDark ? Sun : Moon} />
+              <span className="hidden sm:inline">{isDark ? 'Light' : 'Dark'}</span>
             </button>
 
             {cta && (
@@ -193,11 +174,11 @@ export default function Navbar({
               <button
                 type="button"
                 onClick={toggleTheme}
-                aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+                aria-label={`Switch to ${isDark ? 'light' : 'dark'} mode`}
                 className={`${baseLink} ${inactive} flex items-center justify-between`}
               >
-                <span>Theme: {theme === 'dark' ? 'Dark' : 'Light'}</span>
-                <Icon iconNode={theme === 'dark' ? Sun : Moon} />
+                <span>Theme: {isDark ? 'Dark' : 'Light'}</span>
+                <Icon iconNode={isDark ? Sun : Moon} />
               </button>
 
               {cta && (

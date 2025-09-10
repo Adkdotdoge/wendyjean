@@ -4,7 +4,19 @@ export default function Hero() {
   const { settings } = usePage<{ settings?: { heroUrl?: string | null; appName?: string | null; about?: string | null } }>().props;
   const src = settings?.heroUrl ?? null;
   const appName = settings?.appName ?? 'App Name';
-  const about = settings?.about ?? 'Painter • Illustrator • Mixed Media';
+  // Extract a plain-text tagline from rich HTML if needed
+  const aboutHtml = settings?.about ?? 'Painter • Illustrator • Mixed Media';
+  const about = (() => {
+    if (!aboutHtml) return '';
+    if (typeof window === 'undefined') {
+      // server-side: naive strip tags
+      return String(aboutHtml).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+    const div = document.createElement('div');
+    div.innerHTML = aboutHtml;
+    const text = (div.textContent || div.innerText || '').trim();
+    return text.length > 160 ? text.slice(0, 157) + '…' : text;
+  })();
   return (
     <section
       id="hero"

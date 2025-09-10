@@ -1,7 +1,7 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useMemo } from 'react';
 import { type SharedData } from '@/types';
-import { Head, Link, usePage } from '@inertiajs/react';
-import Navbar from '@/components/frontend/Navbar';
+import { Head, usePage } from '@inertiajs/react';
+import FrontendLayout from '@/layouts/frontend-layout';
 import Hero from '@/components/frontend/Hero';
 import About from '@/components/frontend/About';
 import Gallery, { type GalleryItem as GalleryItemType } from '@/components/frontend/Gallery';
@@ -54,29 +54,12 @@ export default function Welcome() {
     const list = (galleries ?? []) as NonNullable<PageProps['galleries']>;
     return list.reduce<GalleryItemType[]>((acc, g) => {
       const src = normalizeSrc(g.primary_url);
-      if (src) acc.push({ src, alt: g.alt_text ?? g.name });
+      if (src) acc.push({ src, alt: g.alt_text ?? g.name, slug: g.slug ?? undefined, name: g.name });
       return acc;
     }, []);
   }, [galleries]);
 
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
-  const [galleryOpen, setGalleryOpen] = useState(false);
-  useEffect(() => {
-    const root = document.documentElement;
-    const stored = (localStorage.getItem('theme') as 'light' | 'dark' | null);
-    const preferred: 'light' | 'dark' =
-      stored ?? (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-    if (preferred === 'dark') root.classList.add('dark');
-    else root.classList.remove('dark');
-    setTheme(preferred);
-  }, []);
-  const toggleTheme = useCallback(() => {
-    const next: 'light' | 'dark' = theme === 'dark' ? 'light' : 'dark';
-    const root = document.documentElement;
-    if (next === 'dark') root.classList.add('dark'); else root.classList.remove('dark');
-    localStorage.setItem('theme', next);
-    setTheme(next);
-  }, [theme]);
+  // Theme setup is centralized in use-appearance and app bootstrap; no duplicate logic here.
 
   return (
     <>
@@ -94,21 +77,19 @@ export default function Welcome() {
         )}
       </Head>
 
-      {/* Fixed Navbar */}
-      <Navbar />
-
-      {/* Page wrapper with top padding to account for fixed header */}
-      <div className="bg-[#FDFDFC] text-[#1b1b18] dark:bg-[#0a0a0a] dark:text-[#EDEDEC]">
-        {/* HERO: full width, 100vh image */}
-        <Hero />
-        {/* ABOUT SECTION */}
-        <About />
-        {/* GALLERY: 2-col row, items animate in */}
-        <Gallery items={galleryItems} />
-      </div>
-      <div>
-        <ContactForm />
-      </div>
+      <FrontendLayout useAnchors>
+        <div className="bg-[#FDFDFC] text-[#1b1b18] dark:bg-[#0a0a0a] dark:text-[#EDEDEC]">
+          {/* HERO: full width, 100vh image */}
+          <Hero />
+          {/* ABOUT SECTION */}
+          <About />
+          {/* GALLERY: 2-col row, items animate in */}
+          <Gallery items={galleryItems} />
+        </div>
+        <div>
+          <ContactForm />
+        </div>
+      </FrontendLayout>
     </>
   );
 }

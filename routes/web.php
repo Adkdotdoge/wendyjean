@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Spatie\MediaLibrary\MediaCollections\Models\Media as SpatieMedia;
 use App\Http\Controllers\Public\ContactMessageController;
+use App\Models\Gallery as GalleryModel;
 
 Route::get('/', function () {
     $galleries = Gallery::query()
@@ -15,7 +16,7 @@ Route::get('/', function () {
         ->map(fn (Gallery $g) => [
             'src' => $g->primary_url,
             'alt' => $g->name,
-            'href' => url("/gallery/{$g->slug}"),
+            'href' => url("/galleries/{$g->slug}"),
         ])->values();
 
     return Inertia::render('welcome', [
@@ -61,6 +62,7 @@ Route::get('/api/galleries/{slug}', function (string $slug) {
         'id' => $gallery->id,
         'name' => $gallery->name,
         'slug' => $gallery->slug,
+        'description' => $gallery->description,
         'primary_url' => $gallery->primary_url,
         'images_urls' => $imagesUrls,
         // optional compatibility alias
@@ -77,3 +79,38 @@ Route::get('/media/{media}', function (Request $request, SpatieMedia $media) {
 Route::post('/contact', [ContactMessageController::class, 'store'])
     ->name('contact.store')
     ->middleware('throttle:10,1'); // optional: rate-limit bots
+// --- Gallery pages (Inertia) ---
+Route::get('/galleries', function () {
+    $galleries = GalleryModel::query()
+        ->where('is_active', true)
+        ->ordered()
+        ->get(['id','name','slug','order_column'])
+        ->map(fn (GalleryModel $g) => [
+            'id' => $g->id,
+            'name' => $g->name,
+            'slug' => $g->slug,
+            'order_column' => $g->order_column,
+            'primary_url' => $g->primary_url,
+            'images_urls' => $g->images_urls,
+        ])->values();
+
+    return Inertia::render('galleries/index', [
+        'galleries' => $galleries,
+    ]);
+})->name('galleries.index');
+
+Route::get('/galleries/{slug}', function (string $slug) {
+    /** @var GalleryModel $gallery */
+    $gallery = GalleryModel::query()->where('slug', $slug)->firstOrFail();
+
+    return Inertia::render('galleries/show', [
+        'gallery' => [
+            'id' => $gallery->id,
+            'name' => $gallery->name,
+            'slug' => $gallery->slug,
+            'description' => $gallery->description,
+            'primary_url' => $gallery->primary_url,
+            'images_urls' => $gallery->images_urls,
+        ],
+    ]);
+})->name('galleries.show');

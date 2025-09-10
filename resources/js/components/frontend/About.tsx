@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef, useState} from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { usePage } from '@inertiajs/react';
 
 
@@ -50,28 +50,13 @@ export default function About() {
     <section id="about" className="mx-auto max-w-5xl scroll-mt-24 px-6 py-20 md:py-28">
       <RevealOnScroll>
         {about?.trim() ? (
-          <div
-            className="max-w-none mt-4 text-base leading-7 text-neutral-800 dark:text-neutral-200 break-words
-                       [&_*]:whitespace-pre-wrap
-                       [&_h1]:text-3xl [&_h1]:font-semibold [&_h1]:tracking-tight [&_h1]:mt-0 [&_h1]:mb-2
-                       [&_h2]:text-2xl [&_h2]:font-semibold [&_h2]:tracking-tight [&_h2]:mt-0 [&_h2]:mb-2
-                       [&_h3]:text-xl  [&_h3]:font-semibold [&_h3]:tracking-tight [&_h3]:mt-0 [&_h3]:mb-2
-                       [&_p]:mt-1
-                       [&_a]:underline [&_a]:decoration-2 hover:[&_a]:decoration-4
-                       [&_img]:rounded-lg
-                       [&_hr]:my-8
-                       [&_pre]:border [&_pre]:rounded-lg
-                       [&_table]:w-full [&_table]:my-6 [&_th]:text-left [&_td]:align-top
-                       [&_blockquote]:my-6 [&_blockquote]:border-l-4 [&_blockquote]:pl-6 [&_blockquote]:italic
-                       [&_blockquote]:border-neutral-300 dark:[&_blockquote]:border-neutral-700
-                       [&>blockquote]:relative [&>blockquote]:pl-6
-                       [&>blockquote:before]:content-['“'] [&>blockquote:before]:absolute [&>blockquote:before]:-left-4
-                       [&>blockquote:before]:text-4xl [&>blockquote:before]:leading-none
-                       [&>blockquote:before]:text-neutral-400 dark:[&>blockquote:before]:text-neutral-500
-                       [&_*[style*='text-align:center']]:text-center
-                       [&_*[style*='text-align:right']]:text-right
-                       [&_*[style*='text-align:justify']]:text-justify
-                       [&>iframe]:w-full [&>iframe]:h-auto [&>iframe]:aspect-video"
+          <article
+            className="prose prose-neutral dark:prose-invert max-w-none mt-4 break-words
+                       prose-a:underline prose-a:decoration-2 hover:prose-a:decoration-4
+                       prose-img:rounded-lg prose-hr:my-8 prose-pre:border prose-pre:rounded-lg
+                       prose-table:w-full prose-th:text-left prose-td:align-top"
+            // Preserve manual line breaks from simpler editors
+            style={{ whiteSpace: 'pre-wrap' }}
             dangerouslySetInnerHTML={{ __html: about }}
           />
         ) : null}

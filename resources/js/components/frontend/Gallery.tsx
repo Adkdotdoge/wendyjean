@@ -1,10 +1,20 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from '@inertiajs/react';
 // Shared image decode/cache across grid & modal to avoid duplicate work
 const __imgDecodeCache: Map<string, Promise<void>> = new Map();
 const __imgCompleteCache: Set<string> = new Set();
 import { usePage } from '@inertiajs/react';
 
-export type GalleryItem = { src: string; alt?: string; href?: string; all?: string[]; slug?: string; order_column?: number | null; name?: string };
+export type GalleryItem = {
+  src: string;
+  alt?: string;
+  href?: string;
+  all?: string[];
+  slug?: string;
+  order_column?: number | null;
+  name?: string;
+  description?: string | null;
+};
 
 
 function TiltImage({
@@ -204,7 +214,7 @@ function TiltImage({
           loaded ? 'opacity-100' : 'opacity-0',
           className,
         ].join(' ')}
-        loading={eager ? 'eager' : 'eager'}
+        loading={eager ? 'eager' : 'lazy'}
         decoding="async"
         draggable={false}
         onLoad={() => {
@@ -262,6 +272,9 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
   const [isModalMounted, setIsModalMounted] = useState(false);
   const [isModalActive, setIsModalActive] = useState(false);
   const [modalImages, setModalImages] = useState<string[]>([]);
+  const [modalTitle, setModalTitle] = useState<string | null>(null);
+  const [modalDescription, setModalDescription] = useState<string | null>(null);
+  const [modalSlug, setModalSlug] = useState<string | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
   const modalScrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -413,7 +426,10 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
   async function openGalleryModal(item: GalleryItem) {
     const fallbackImgs = Array.isArray(item.all) && item.all.length > 0 ? item.all : [item.src];
     setModalImages(fallbackImgs);
+    setModalTitle(item.name ?? item.alt ?? 'Gallery');
+    setModalDescription(item.description ?? null);
     setIsModalMounted(true);
+    setModalSlug(item.slug ?? null);
     requestAnimationFrame(() => setIsModalActive(true));
 
     if (!item.slug || !endpoint) return;
@@ -425,12 +441,19 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
       const res = await fetch(url, { headers: { Accept: 'application/json' } });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const raw = await res.json();
-      // Accept shapes: { images_urls: [] } | { data: { images_urls: [] } }
-      const images = Array.isArray((raw as any).images_urls)
-        ? (raw as any).images_urls
-        : Array.isArray((raw as any)?.data?.images_urls)
-        ? (raw as any).data.images_urls
-        : null;
+      // Accept shapes: { images_urls, name, description } | { data: { ... } }
+      const payload: any = (raw && typeof raw === 'object' && 'data' in raw) ? (raw as any).data : raw;
+      const images = Array.isArray(payload?.images_urls) ? payload.images_urls : null;
+
+      if (typeof payload?.name === 'string') {
+        setModalTitle(payload.name);
+      }
+      if (typeof payload?.description === 'string' && payload.description.trim().length > 0) {
+        setModalDescription(payload.description);
+      }
+      if (typeof payload?.slug === 'string') {
+        setModalSlug(payload.slug);
+      }
 
       if (Array.isArray(images) && images.length > 0) {
         const list = images.filter(Boolean).map(String);
@@ -694,6 +717,34 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
             style={{ WebkitOverflowScrolling: 'touch' } as any}
           >
             <div className="mx-auto max-w-screen-2xl">
+              {(modalTitle || modalDescription) && (
+                <div className="mx-auto mb-6 max-w-3xl text-center">
+                  {modalTitle && (
+                    <h3 className="text-lg font-semibold text-white/95 dark:text-white">{modalTitle}</h3>
+                  )}
+                  {modalDescription && (
+                    <>
+                      <p
+                        className="mt-2 text-sm text-white/85 dark:text-white/80"
+                        style={{ display: '-webkit-box', WebkitLineClamp: 3 as any, WebkitBoxOrient: 'vertical' as any, overflow: 'hidden' }}
+                      >
+                        {modalDescription}
+                      </p>
+                      {modalSlug && (
+                        <div className="mt-3">
+                          <Link
+                            href={`/galleries/${modalSlug}`}
+                            className="inline-flex items-center gap-1 rounded-md bg-white/10 px-3 py-1.5 text-sm text-white hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/40"
+                          >
+                            Read more
+                            <span aria-hidden>→</span>
+                          </Link>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
               <div className="grid grid-cols-1 place-items-center gap-6">
                 {modalImages.map((src, i) => (
                   <div
