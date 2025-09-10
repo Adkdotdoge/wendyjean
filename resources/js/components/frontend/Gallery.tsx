@@ -31,6 +31,7 @@ function TiltImage({
   sizes,
   sources,
   placeholder,
+  onLoadComplete,
   eager = true,
   preload = true,
   fetchPriority,
@@ -47,6 +48,7 @@ function TiltImage({
   sizes?: string;
   sources?: Array<{ type: string; srcSet: string; sizes?: string }>;
   placeholder?: string | null;
+  onLoadComplete?: () => void;
   eager?: boolean;
   preload?: boolean;
   fetchPriority?: 'high' | 'low' | 'auto' | undefined;
@@ -245,6 +247,7 @@ function TiltImage({
             onLoad={() => {
               try { __imgCompleteCache.add(src); } catch {}
               setLoaded(true);
+              try { onLoadComplete && onLoadComplete(); } catch {}
             }}
             fetchPriority={fetchPriority}
           />
@@ -270,6 +273,7 @@ function TiltImage({
           onLoad={() => {
             try { __imgCompleteCache.add(src); } catch {}
             setLoaded(true);
+            try { onLoadComplete && onLoadComplete(); } catch {}
           }}
           fetchPriority={fetchPriority}
         />
@@ -323,6 +327,9 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState<number>(8);
+  const loadedSetRef = useRef<Set<string>>(new Set());
+  const [loadedCount, setLoadedCount] = useState(0);
+  const [appending, setAppending] = useState(false);
   const [isModalMounted, setIsModalMounted] = useState(false);
   const [isModalActive, setIsModalActive] = useState(false);
   const [modalImages, setModalImages] = useState<string[]>([]);
@@ -473,6 +480,9 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
       for (const e of entries) {
         if (e.isIntersecting) {
           setVisibleCount((n) => n + 6);
+          setAppending(true);
+          // auto-hide appending after a short delay as new items load
+          setTimeout(() => setAppending(false), 1200);
         }
       }
     }, { root: null, rootMargin: '600px 0px', threshold: 0.01 });
@@ -516,6 +526,25 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
     });
     return [left, right] as const;
   }, [displayed]);
+
+  // Track loaded count among displayed items
+  useEffect(() => {
+    const set = loadedSetRef.current;
+    // Remove entries no longer in displayed
+    const displayedKeys = new Set(displayed.map((it) => it.src));
+    for (const key of Array.from(set)) {
+      if (!displayedKeys.has(key)) set.delete(key);
+    }
+    setLoadedCount(set.size);
+  }, [displayed]);
+
+  function markLoaded(key: string) {
+    const set = loadedSetRef.current;
+    if (!set.has(key)) {
+      set.add(key);
+      setLoadedCount(set.size);
+    }
+  }
 
   async function openGalleryModal(item: GalleryItem) {
     const full = Array.isArray(item.all) && item.all.length > 0 ? item.all : [item.src];
@@ -666,7 +695,17 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
       <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">Galleries</h2>
       {loading && <div className="mt-6 text-sm opacity-70">Loading galleries…</div>}
       {error && <div className="mt-6 text-sm text-red-600">{error}</div>}
-      <div className="mt-8 md:flex md:gap-6">
+      {/* Status line: show while initial batch or appended batch is loading, and when more remain */}
+      <div className="mt-4 text-xs text-neutral-600 dark:text-neutral-300">
+        {(loadedCount < displayed.length || appending || moreToShow) && (
+          <div className="inline-flex items-center gap-2 rounded-full bg-neutral-100 px-3 py-1 dark:bg-neutral-900">
+            <span className="h-3 w-3 animate-spin rounded-full border-2 border-neutral-400 border-t-transparent" aria-hidden />
+            <span>{loadedCount < displayed.length ? 'Loading images…' : (moreToShow ? 'Loading more…' : 'Loading…')}</span>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 md:flex md:gap-6">
         {/* Left column (items at indices 0,2,4,...) */}
         <div className="space-y-6 md:w-1/2">
           {leftCol.map(({ item, i }) => (
@@ -704,6 +743,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                         ...(item.primary?.srcset?.webp ? [{ type: 'image/webp', srcSet: item.primary.srcset.webp, sizes: item.primary?.sizes }] : []),
                       ]}
                       placeholder={item.primary?.placeholder}
+                      onLoadComplete={() => markLoaded(item.src)}
                     />
                   </a>
                   <button
@@ -732,6 +772,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                         ...(item.primary?.srcset?.webp ? [{ type: 'image/webp', srcSet: item.primary.srcset.webp, sizes: item.primary?.sizes }] : []),
                       ]}
                       placeholder={item.primary?.placeholder}
+                      onLoadComplete={() => markLoaded(item.src)}
                     />
                   </button>
                   <button

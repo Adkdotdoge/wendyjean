@@ -24,7 +24,8 @@ export default function Navbar({
     { label: 'Contact', href: '#contact' },
     { label: 'Gallery', href: '#gallery' },
   ],
-  cta = { label: 'Order Now', href: '/order' },
+  // Remove CTA from UI to match mobile/desktop
+  cta = null,
 }: NavbarProps) {
   const [open, setOpen] = useState(false);
 
@@ -71,15 +72,6 @@ export default function Navbar({
         <div className="flex h-14 items-center justify-between">
           {/* Left: Brand */}
           <div className="flex items-center gap-3">
-            <button
-              className="lg:hidden inline-flex items-center justify-center p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
-              aria-label="Toggle menu"
-              aria-expanded={open}
-              onClick={() => setOpen((v) => !v)}
-            >
-              {open ? <Icon iconNode={X} /> : <Icon iconNode={Menu} />}
-            </button>
-
             <Link
               href={brandHref}
               className="text-lg font-semibold tracking-tight hover:opacity-90"
@@ -88,36 +80,37 @@ export default function Navbar({
             </Link>
           </div>
 
-          {/* Center: Desktop links */}
-          <div className="hidden lg:flex items-center gap-1">
-            {links.map((l) => {
-              const isActive = l.href.startsWith('#') ? false : (l.active ?? (l.href !== '/' ? current.startsWith(l.href) : current === '/'));
-              if (l.href.startsWith('#')) {
+          {/* Right: Desktop links + theme toggle + mobile hamburger */}
+          <div className="flex items-center gap-1">
+            {/* Desktop links aligned right */}
+            <div className="hidden lg:flex items-center gap-1">
+              {links.map((l) => {
+                const isActive = l.href.startsWith('#') ? false : (l.active ?? (l.href !== '/' ? current.startsWith(l.href) : current === '/'));
+                if (l.href.startsWith('#')) {
+                  return (
+                    <a
+                      key={l.href + l.label}
+                      href={l.href}
+                      onClick={(e) => handleAnchorClick(e, l.href)}
+                      className={`${baseLink} ${inactive}`}
+                    >
+                      {l.label}
+                    </a>
+                  );
+                }
                 return (
-                  <a
+                  <Link
                     key={l.href + l.label}
                     href={l.href}
-                    onClick={(e) => handleAnchorClick(e, l.href)}
-                    className={`${baseLink} ${inactive}`}
+                    className={`${baseLink} ${isActive ? active : inactive}`}
                   >
                     {l.label}
-                  </a>
+                  </Link>
                 );
-              }
-              return (
-                <Link
-                  key={l.href + l.label}
-                  href={l.href}
-                  className={`${baseLink} ${isActive ? active : inactive}`}
-                >
-                  {l.label}
-                </Link>
-              );
-            })}
-          </div>
+              })}
+            </div>
 
-          {/* Right: CTA / Auth */}
-          <div className="hidden lg:flex items-center gap-2">
+            {/* Theme toggle visible on all sizes */}
             <button
               type="button"
               onClick={toggleTheme}
@@ -129,14 +122,15 @@ export default function Navbar({
               <span className="hidden sm:inline">{isDark ? 'Light' : 'Dark'}</span>
             </button>
 
-            {cta && (
-              <Link
-                href={cta.href}
-                className="hidden rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
-              >
-                {cta.label}
-              </Link>
-            )}
+            {/* Mobile menu button on the right */}
+            <button
+              className="lg:hidden inline-flex items-center justify-center p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
+              aria-label="Toggle menu"
+              aria-expanded={open}
+              onClick={() => setOpen((v) => !v)}
+            >
+              {open ? <Icon iconNode={X} /> : <Icon iconNode={Menu} />}
+            </button>
           </div>
         </div>
       </div>
