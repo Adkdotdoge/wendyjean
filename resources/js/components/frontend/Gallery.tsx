@@ -296,6 +296,14 @@ type ServerGallery = {
   primary_url?: string | null;
   images_urls?: string[];
   order_column?: number | null;
+  primary?: {
+    src?: string | null;
+    srcset?: { webp?: string | null; jpg?: string | null; avif?: string | null } | null;
+    sizes?: string | null;
+    width?: number | null;
+    height?: number | null;
+    placeholder?: string | null;
+  } | null;
 };
 
 type PageProps = {
@@ -305,6 +313,14 @@ type PageProps = {
     primary_url?: string | null;
     images_urls?: string[];
     order_column?: number | null;
+    primary?: {
+      src?: string | null;
+      srcset?: { webp?: string | null; jpg?: string | null; avif?: string | null } | null;
+      sizes?: string | null;
+      width?: number | null;
+      height?: number | null;
+      placeholder?: string | null;
+    } | null;
   }> | (() => any);
 };
 
@@ -416,10 +432,11 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
               slug: g.slug,
               primary: g.primary ? {
                 src: String(g.primary.src || g.primary_url || g.src || ''),
-                srcset: g.primary.srcset,
-                sizes: g.primary.sizes,
+                srcset: g.primary.srcset ?? undefined,
+                sizes: g.primary.sizes ?? undefined,
                 width: g.primary.width ?? null,
                 height: g.primary.height ?? null,
+                placeholder: g.primary.placeholder ?? null,
               } : undefined,
             } as GalleryItem;
           });
