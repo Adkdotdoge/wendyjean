@@ -343,6 +343,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState<number>(8);
+  const ioSupported = typeof window !== 'undefined' && 'IntersectionObserver' in window;
   const loadedSetRef = useRef<Set<string>>(new Set());
   const [loadedCount, setLoadedCount] = useState(0);
   const [appending, setAppending] = useState(false);
@@ -355,6 +356,8 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
   const [modalSlug, setModalSlug] = useState<string | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
   const modalScrollRef = useRef<HTMLDivElement | null>(null);
+  // Pointer capability (used for perf heuristics in this component)
+  const coarsePointer = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
 
   const page = usePage<PageProps>();
   const sharedGalleriesRaw = ((): any => {
@@ -374,9 +377,9 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
           name: g.name,
           slug: g.slug,
           primary: g.primary ? {
-            src: String(g.primary.src || g.primary_url || g.src || ''),
-            srcset: g.primary.srcset,
-            sizes: g.primary.sizes,
+            src: String(g.primary.src || g.primary_url || ''),
+            srcset: g.primary.srcset ?? undefined,
+            sizes: g.primary.sizes ?? undefined,
             width: g.primary.width ?? null,
             height: g.primary.height ?? null,
           } : undefined,
@@ -431,7 +434,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
               name: g.name,
               slug: g.slug,
               primary: g.primary ? {
-                src: String(g.primary.src || g.primary_url || g.src || ''),
+                src: String(g.primary.src || g.primary_url || ''),
                 srcset: g.primary.srcset ?? undefined,
                 sizes: g.primary.sizes ?? undefined,
                 width: g.primary.width ?? null,
@@ -492,7 +495,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const el = sentinelRef.current;
-    if (!el) return;
+    if (!el || !ioSupported) return;
     const io = new IntersectionObserver((entries) => {
       for (const e of entries) {
         if (e.isIntersecting) {
@@ -504,7 +507,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
     }, { root: null, rootMargin: '600px 0px', threshold: 0.01 });
     io.observe(el);
     return () => io.disconnect();
-  }, [displayed.length, moreToShow]);
+  }, [displayed.length, moreToShow, ioSupported]);
 
   // Preload a small subset of images on faster connections only
   useEffect(() => {
@@ -514,7 +517,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
     const effective = String(conn?.effectiveType || '').toLowerCase();
     const slow = saveData || effective.includes('2g') || effective.includes('3g');
     const isCoarse = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
-    if (slow || isCoarse) return; // don’t preload on mobile/slow connections
+    if (slow || coarsePointer) return; // don’t preload on mobile/slow connections
 
     const urls: string[] = [];
     for (let i = 0; i < Math.min(list.length, 6); i++) {
@@ -591,7 +594,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
     const saveData = !!conn?.saveData;
     const effective = String(conn?.effectiveType || '').toLowerCase();
     const slow = saveData || effective.includes('2g') || effective.includes('3g');
-    if (slow || isCoarse) return;
+    if (slow || coarsePointer) return;
 
     try {
       setModalLoading(true);
@@ -917,7 +920,22 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
         {!loading && list.length === 0 && (
           <div className="text-sm text-muted-foreground">No galleries to display yet.</div>
         )}
-        {moreToShow && <div ref={sentinelRef} className="h-4 w-full" aria-hidden />}
+        {moreToShow && (
+          <>
+            <div ref={sentinelRef} className="h-4 w-full" aria-hidden />
+            {!ioSupported && (
+              <div className="mt-4 flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => setVisibleCount((n) => n + 6)}
+                  className="rounded-md border px-4 py-2 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                >
+                  Load more
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </div>
       {isModalMounted && (
         <div role="dialog" aria-modal="true" className="fixed inset-0 z-50">
