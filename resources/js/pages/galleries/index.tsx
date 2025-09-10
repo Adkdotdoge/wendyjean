@@ -26,6 +26,13 @@ export default function GalleriesIndex() {
     href: `/galleries/${g.slug}`,
     all: Array.isArray(g.images_urls) ? g.images_urls : undefined,
     order_column: g.order_column ?? undefined,
+    primary: (g as any).primary ? {
+      src: (g as any).primary.src,
+      srcset: (g as any).primary.srcset,
+      sizes: (g as any).primary.sizes,
+      width: (g as any).primary.width ?? null,
+      height: (g as any).primary.height ?? null,
+    } : undefined,
   })).filter((x) => x.src);
 
   return (

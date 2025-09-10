@@ -41,6 +41,7 @@ class HandleInertiaRequests extends Middleware
                                 'slug' => $g->slug,
                                 'order_column' => $g->order_column,
                                 'primary_url' => $g->primary_url, // accessor on Gallery model
+                                'primary' => $g->primaryResponsive(),
                                 'images_urls' => $g->images_urls,
                                 // Optional alt text; you can surface from media custom_properties if desired
                                 'alt_text' => null,

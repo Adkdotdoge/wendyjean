@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
 use Spatie\MediaLibrary\MediaCollections\Models\Media as SpatieMedia;
+use Spatie\Image\Enums\Fit;
 
 class Gallery extends Model implements HasMedia
 {
@@ -42,6 +43,39 @@ class Gallery extends Model implements HasMedia
                 'image/webp',
                 'image/avif',
             ]);
+    }
+
+    public function registerMediaConversions(?SpatieMedia $media = null): void
+    {
+        // Grid conversions (used in cards/lists)
+        $this
+            ->addMediaConversion('grid_webp')
+            ->format('webp')
+            ->fit(Fit::Contain, 1024, 1024)
+            ->withResponsiveImages()
+            ->queued();
+
+        $this
+            ->addMediaConversion('grid_jpg')
+            ->format('jpg')
+            ->fit(Fit::Contain, 1024, 1024)
+            ->withResponsiveImages()
+            ->queued();
+
+        // Hero/detail conversions (wider)
+        $this
+            ->addMediaConversion('hero_webp')
+            ->format('webp')
+            ->fit(Fit::Cover, 2048, 1152)
+            ->withResponsiveImages()
+            ->queued();
+
+        $this
+            ->addMediaConversion('hero_jpg')
+            ->format('jpg')
+            ->fit(Fit::Cover, 2048, 1152)
+            ->withResponsiveImages()
+            ->queued();
     }
 
     private function makeUrlForMedia(SpatieMedia $m): ?string
@@ -82,6 +116,41 @@ class Gallery extends Model implements HasMedia
     {
         $urls = $this->images_urls;
         return $urls[0] ?? null;
+    }
+
+    /**
+     * Build a responsive payload for the primary image.
+     * Returns src (original/best), srcset strings for webp/jpg, sizes, and optional width/height hint.
+     */
+    public function primaryResponsive(): ?array
+    {
+        $media = $this->media()
+            ->where('collection_name', 'images')
+            ->orderBy('order_column')
+            ->orderBy('id')
+            ->first();
+
+        if (! $media) {
+            return null;
+        }
+
+        $gridWebp = $media->responsiveImages('grid_webp')->getSrcset();
+        $gridJpg  = $media->responsiveImages('grid_jpg')->getSrcset();
+
+        $firstFile = $media->responsiveImages('grid_webp')->files->first();
+        $width  = $firstFile?->width();
+        $height = $firstFile?->height();
+
+        return [
+            'src'    => $this->makeUrlForMedia($media) ?? $media->getUrl(),
+            'srcset' => [
+                'webp' => $gridWebp ?: null,
+                'jpg'  => $gridJpg ?: null,
+            ],
+            'sizes'  => '(min-width: 768px) 50vw, 100vw',
+            'width'  => $width,
+            'height' => $height,
+        ];
     }
     /**
      * Scope: order galleries with nulls last, then by order_column, then id.

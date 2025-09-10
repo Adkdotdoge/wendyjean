@@ -46,6 +46,7 @@ Route::get('/api/galleries', function () {
             'slug'         => $g->slug,
             'order_column' => $g->order_column,
             'primary_url'  => $g->primary_url,
+            'primary'      => $g->primaryResponsive(),
             'images_urls'  => $g->images_urls,
         ])->values()
     );
@@ -62,6 +63,7 @@ Route::get('/api/galleries/{slug}', function (string $slug) {
         'id' => $gallery->id,
         'name' => $gallery->name,
         'slug' => $gallery->slug,
+        'primary' => $gallery->primaryResponsive(),
         'description' => $gallery->description,
         'primary_url' => $gallery->primary_url,
         'images_urls' => $imagesUrls,

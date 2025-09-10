@@ -54,7 +54,19 @@ export default function Welcome() {
     const list = (galleries ?? []) as NonNullable<PageProps['galleries']>;
     return list.reduce<GalleryItemType[]>((acc, g) => {
       const src = normalizeSrc(g.primary_url);
-      if (src) acc.push({ src, alt: g.alt_text ?? g.name, slug: g.slug ?? undefined, name: g.name });
+      if (src) acc.push({
+        src,
+        alt: g.alt_text ?? g.name,
+        slug: g.slug ?? undefined,
+        name: g.name,
+        primary: g.primary ? {
+          src: normalizeSrc(g.primary.src)!,
+          srcset: g.primary.srcset,
+          sizes: g.primary.sizes,
+          width: g.primary.width ?? null,
+          height: g.primary.height ?? null,
+        } : undefined,
+      });
       return acc;
     }, []);
   }, [galleries]);

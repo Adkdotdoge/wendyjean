@@ -14,6 +14,13 @@ export type GalleryItem = {
   order_column?: number | null;
   name?: string;
   description?: string | null;
+  primary?: {
+    src: string;
+    srcset?: { webp?: string | null; jpg?: string | null; avif?: string | null };
+    sizes?: string;
+    width?: number | null;
+    height?: number | null;
+  };
 };
 
 
@@ -21,6 +28,7 @@ function TiltImage({
   src,
   srcSet,
   sizes,
+  sources,
   eager = true,
   preload = true,
   fetchPriority,
@@ -35,6 +43,7 @@ function TiltImage({
   src: string;
   srcSet?: string;
   sizes?: string;
+  sources?: Array<{ type: string; srcSet: string; sizes?: string }>;
   eager?: boolean;
   preload?: boolean;
   fetchPriority?: 'high' | 'low' | 'auto' | undefined;
@@ -49,8 +58,8 @@ function TiltImage({
   // Determine pointer type and adjust intensity accordingly
   const isCoarse = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
   // Make desktop a bit subtler, mobile/coarse a bit stronger so it's visible
-  const effectiveMaxRotate = isCoarse ? maxRotate * 1.25 : maxRotate * 0.75;
-  const effectiveMaxTranslate = isCoarse ? maxTranslate * 1.4 : maxTranslate * 0.85;
+  const effectiveMaxRotate = isCoarse ? maxRotate * 1.6 : maxRotate * 0.8;
+  const effectiveMaxTranslate = isCoarse ? maxTranslate * 1.2 : maxTranslate * 0.8;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -141,8 +150,8 @@ function TiltImage({
     // Clamp
     ny = Math.max(-1, Math.min(1, ny));
     // Pull with scroll. Stronger on coarse/mobile so it reads; subtler on desktop.
-    const rotateScale = isCoarse ? 1.1 : 0.6;
-    const translateScale = isCoarse ? 0.9 : 0.5;
+    const rotateScale = isCoarse ? 1.6 : 0.7;
+    const translateScale = isCoarse ? 1.0 : 0.6;
     const rx =  ny * (effectiveMaxRotate * rotateScale);
     const ry =  0;
     const tx =  0;
@@ -200,29 +209,60 @@ function TiltImage({
       tabIndex={tabIndex}
       aria-label={alt}
     >
-      <img
-        ref={imgRef}
-        src={src}
-        srcSet={srcSet}
-        sizes={sizes}
-        alt={alt ?? ''}
-        className={[
-          'block w-full h-auto select-none dark:bg-neutral-800',
-          'transform-gpu',
-          'transition-transform duration-200 ease-out',
-          'transition-opacity duration-200',
-          loaded ? 'opacity-100' : 'opacity-0',
-          className,
-        ].join(' ')}
-        loading={eager ? 'eager' : 'lazy'}
-        decoding="async"
-        draggable={false}
-        onLoad={() => {
-          try { __imgCompleteCache.add(src); } catch {}
-          setLoaded(true);
-        }}
-        fetchPriority={fetchPriority}
-      />
+      {Array.isArray(sources) && sources.length > 0 ? (
+        <picture>
+          {sources.map((s, idx) => (
+            <source key={idx} type={s.type} srcSet={s.srcSet} sizes={s.sizes ?? sizes} />
+          ))}
+          <img
+            ref={imgRef}
+            src={src}
+            srcSet={srcSet}
+            sizes={sizes}
+            alt={alt ?? ''}
+            className={[
+              'block w-full h-auto select-none dark:bg-neutral-800',
+              'transform-gpu',
+              'transition-transform duration-200 ease-out',
+              'transition-opacity duration-200',
+              loaded ? 'opacity-100' : 'opacity-0',
+              className,
+            ].join(' ')}
+            loading={eager ? 'eager' : 'lazy'}
+            decoding="async"
+            draggable={false}
+            onLoad={() => {
+              try { __imgCompleteCache.add(src); } catch {}
+              setLoaded(true);
+            }}
+            fetchPriority={fetchPriority}
+          />
+        </picture>
+      ) : (
+        <img
+          ref={imgRef}
+          src={src}
+          srcSet={srcSet}
+          sizes={sizes}
+          alt={alt ?? ''}
+          className={[
+            'block w-full h-auto select-none dark:bg-neutral-800',
+            'transform-gpu',
+            'transition-transform duration-200 ease-out',
+            'transition-opacity duration-200',
+            loaded ? 'opacity-100' : 'opacity-0',
+            className,
+          ].join(' ')}
+          loading={eager ? 'eager' : 'lazy'}
+          decoding="async"
+          draggable={false}
+          onLoad={() => {
+            try { __imgCompleteCache.add(src); } catch {}
+            setLoaded(true);
+          }}
+          fetchPriority={fetchPriority}
+        />
+      )}
       {!loaded && (
         <div className="pointer-events-none absolute inset-0 grid place-items-center bg-black/5 dark:bg-white/5">
           <div className="h-6 w-6 rounded-full border-2 border-neutral-300 border-t-transparent animate-spin" aria-hidden="true" />
@@ -295,6 +335,13 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
           order_column: Number.isFinite(Number(g.order_column)) ? Number(g.order_column) : undefined,
           name: g.name,
           slug: g.slug,
+          primary: g.primary ? {
+            src: String(g.primary.src || g.primary_url || g.src || ''),
+            srcset: g.primary.srcset,
+            sizes: g.primary.sizes,
+            width: g.primary.width ?? null,
+            height: g.primary.height ?? null,
+          } : undefined,
         }))
     : [];
 
@@ -345,6 +392,13 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
               order_column: Number.isFinite(Number(g.order_column)) ? Number(g.order_column) : undefined,
               name: g.name,
               slug: g.slug,
+              primary: g.primary ? {
+                src: String(g.primary.src || g.primary_url || g.src || ''),
+                srcset: g.primary.srcset,
+                sizes: g.primary.sizes,
+                width: g.primary.width ?? null,
+                height: g.primary.height ?? null,
+              } : undefined,
             } as GalleryItem;
           });
 
@@ -546,7 +600,11 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
         {/* Left column (items at indices 0,2,4,...) */}
         <div className="space-y-6 md:w-1/2">
           {leftCol.map(({ item, i }) => (
-            <div key={`${item.src}-${i}`} className="relative w-full overflow-hidden rounded-md shadow-sm">
+            <div
+              key={`${item.src}-${i}`}
+              className="relative w-full overflow-hidden rounded-md shadow-sm"
+              style={{ contentVisibility: 'auto', containIntrinsicSize: '480px' } as any}
+            >
               {linkToDetail && item.href ? (
                 <>
                   <a
@@ -559,12 +617,17 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                     }}
                   >
                     <TiltImage
-                      src={item.src}
+                      src={item.primary?.src || item.src}
                       alt={item.alt ?? `Gallery piece ${i + 1}`}
                       className="w-full h-auto max-h-none object-contain"
                       eager={i === 0}
                       preload={i === 0}
                       fetchPriority={i === 0 ? 'high' : 'low'}
+                      sizes={item.primary?.sizes || "(min-width: 768px) 50vw, 100vw"}
+                      srcSet={item.primary?.srcset?.jpg || undefined}
+                      sources={[
+                        ...(item.primary?.srcset?.webp ? [{ type: 'image/webp', srcSet: item.primary.srcset.webp, sizes: item.primary?.sizes }] : []),
+                      ]}
                     />
                   </a>
                   <button
@@ -581,12 +644,17 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                 <>
                   <button type="button" onClick={() => openGalleryModal(item)} className="block h-full w-full text-left">
                     <TiltImage
-                      src={item.src}
+                      src={item.primary?.src || item.src}
                       alt={item.alt ?? `Gallery piece ${i + 1}`}
                       className="w-full h-auto max-h-none object-contain"
                       eager={i === 0}
                       preload={i === 0}
                       fetchPriority={i === 0 ? 'high' : 'low'}
+                      sizes={item.primary?.sizes || "(min-width: 768px) 50vw, 100vw"}
+                      srcSet={item.primary?.srcset?.jpg || undefined}
+                      sources={[
+                        ...(item.primary?.srcset?.webp ? [{ type: 'image/webp', srcSet: item.primary.srcset.webp, sizes: item.primary?.sizes }] : []),
+                      ]}
                     />
                   </button>
                   <button
@@ -607,7 +675,11 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
         {/* Right column (items at indices 1,3,5,...) */}
         <div className="space-y-6 md:w-1/2 mt-6 md:mt-0">
           {rightCol.map(({ item, i }) => (
-            <div key={`${item.src}-${i}`} className="relative w-full overflow-hidden rounded-md shadow-sm">
+            <div
+              key={`${item.src}-${i}`}
+              className="relative w-full overflow-hidden rounded-md shadow-sm"
+              style={{ contentVisibility: 'auto', containIntrinsicSize: '480px' } as any}
+            >
               {linkToDetail && item.href ? (
                 <>
                   <a
