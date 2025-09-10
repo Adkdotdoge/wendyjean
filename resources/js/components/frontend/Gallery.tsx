@@ -546,6 +546,16 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
     }
   }
 
+  // First not-yet-loaded index among displayed, for inline loader placement
+  const firstNotLoadedIndex = useMemo(() => {
+    const set = loadedSetRef.current;
+    for (let idx = 0; idx < displayed.length; idx++) {
+      const key = displayed[idx]?.src;
+      if (!key || !set.has(key)) return idx;
+    }
+    return -1;
+  }, [displayed, loadedCount]);
+
   async function openGalleryModal(item: GalleryItem) {
     const full = Array.isArray(item.all) && item.all.length > 0 ? item.all : [item.src];
     allModalImagesRef.current = full;
@@ -695,19 +705,9 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
       <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">Galleries</h2>
       {loading && <div className="mt-6 text-sm opacity-70">Loading galleries…</div>}
       {error && <div className="mt-6 text-sm text-red-600">{error}</div>}
-      {/* Status line: show while initial batch or appended batch is loading, and when more remain */}
-      <div className="mt-4 text-xs text-neutral-600 dark:text-neutral-300">
-        {(loadedCount < displayed.length || appending || moreToShow) && (
-          <div className="inline-flex items-center gap-2 rounded-full bg-neutral-100 px-3 py-1 dark:bg-neutral-900">
-            <span className="h-3 w-3 animate-spin rounded-full border-2 border-neutral-400 border-t-transparent" aria-hidden />
-            <span>{loadedCount < displayed.length ? 'Loading images…' : (moreToShow ? 'Loading more…' : 'Loading…')}</span>
-          </div>
-        )}
-      </div>
-
       <div className="mt-4 md:flex md:gap-6">
         {/* Left column (items at indices 0,2,4,...) */}
-        <div className="space-y-6 md:w-1/2">
+        <div className="space-y-6 w-full md:w-1/2">
           {leftCol.map(({ item, i }) => (
             <div
               key={`${item.src}-${i}`}
@@ -788,10 +788,18 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
               )}
             </div>
           ))}
+          {(firstNotLoadedIndex !== -1 && firstNotLoadedIndex % 2 === 0 && (loadedCount < displayed.length || moreToShow)) && (
+            <div className="flex items-center justify-center py-3">
+              <div className="inline-flex items-center gap-2 text-xs text-neutral-600 dark:text-neutral-300">
+                <span className="h-3 w-3 animate-spin rounded-full border-2 border-neutral-400 border-t-transparent" aria-hidden />
+                <span>Loading more images…</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right column (items at indices 1,3,5,...) */}
-        <div className="space-y-6 md:w-1/2 mt-6 md:mt-0">
+        <div className="space-y-6 w-full md:w-1/2 mt-6 md:mt-0">
           {rightCol.map(({ item, i }) => (
             <div
               key={`${item.src}-${i}`}
@@ -814,12 +822,19 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                     }}
                   >
                     <TiltImage
-                      src={item.src}
+                      src={item.primary?.src || item.src}
                       alt={item.alt ?? `Gallery piece ${i + 1}`}
                       className="w-full h-auto max-h-none object-contain"
                       eager={i === 0}
                       preload={i === 0}
                       fetchPriority={i === 0 ? 'high' : 'low'}
+                      sizes={item.primary?.sizes || "(min-width: 768px) 50vw, 100vw"}
+                      srcSet={item.primary?.srcset?.jpg || undefined}
+                      sources={[
+                        ...(item.primary?.srcset?.webp ? [{ type: 'image/webp', srcSet: item.primary.srcset.webp, sizes: item.primary?.sizes }] : []),
+                      ]}
+                      placeholder={item.primary?.placeholder}
+                      onLoadComplete={() => markLoaded(item.src)}
                     />
                   </a>
                   <button
@@ -836,12 +851,19 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                 <>
                   <button type="button" onClick={() => openGalleryModal(item)} className="block h-full w-full text-left">
                     <TiltImage
-                      src={item.src}
+                      src={item.primary?.src || item.src}
                       alt={item.alt ?? `Gallery piece ${i + 1}`}
                       className="w-full h-auto max-h-none object-contain"
                       eager={i === 0}
                       preload={i === 0}
                       fetchPriority={i === 0 ? 'high' : 'low'}
+                      sizes={item.primary?.sizes || "(min-width: 768px) 50vw, 100vw"}
+                      srcSet={item.primary?.srcset?.jpg || undefined}
+                      sources={[
+                        ...(item.primary?.srcset?.webp ? [{ type: 'image/webp', srcSet: item.primary.srcset.webp, sizes: item.primary?.sizes }] : []),
+                      ]}
+                      placeholder={item.primary?.placeholder}
+                      onLoadComplete={() => markLoaded(item.src)}
                     />
                   </button>
                   <button
@@ -857,6 +879,14 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
               )}
             </div>
           ))}
+          {(firstNotLoadedIndex !== -1 && firstNotLoadedIndex % 2 === 1 && (loadedCount < displayed.length || moreToShow)) && (
+            <div className="flex items-center justify-center py-3">
+              <div className="inline-flex items-center gap-2 text-xs text-neutral-600 dark:text-neutral-300">
+                <span className="h-3 w-3 animate-spin rounded-full border-2 border-neutral-400 border-t-transparent" aria-hidden />
+                <span>Loading more images…</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {!loading && list.length === 0 && (
