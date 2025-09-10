@@ -165,24 +165,7 @@ export default function Navbar({
                 );
               })}
 
-              <button
-                type="button"
-                onClick={toggleTheme}
-                aria-label={`Switch to ${isDark ? 'light' : 'dark'} mode`}
-                className={`${baseLink} ${inactive} flex items-center justify-between`}
-              >
-                <span>Theme: {isDark ? 'Dark' : 'Light'}</span>
-                <Icon iconNode={isDark ? Sun : Moon} />
-              </button>
-
-              {cta && (
-                <Link
-                  href={cta.href}
-                  className="mt-2 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
-                >
-                  {cta.label}
-                </Link>
-              )}
+              {/* Theme toggle moved to header; keep mobile panel simple */}
             </div>
           </div>
         </div>

@@ -280,8 +280,8 @@ function TiltImage({
       )}
       {!loaded && (
         <div className="pointer-events-none absolute inset-0 grid place-items-center">
-          {/* static skeleton to reduce CPU on mobile */}
-          <div className="absolute inset-0 bg-neutral-200/70 dark:bg-neutral-800/70" />
+          {/* static skeleton to reduce CPU on mobile; hide if we have a placeholder */}
+          {!placeholder && <div className="absolute inset-0 bg-neutral-200/70 dark:bg-neutral-800/70" />}
           <div className="relative h-6 w-6 rounded-full border-2 border-neutral-300 border-t-transparent animate-spin" aria-hidden="true" />
           <span className="sr-only">Loading image…</span>
         </div>
@@ -481,14 +481,13 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
         if (e.isIntersecting) {
           setVisibleCount((n) => n + 6);
           setAppending(true);
-          // auto-hide appending after a short delay as new items load
           setTimeout(() => setAppending(false), 1200);
         }
       }
     }, { root: null, rootMargin: '600px 0px', threshold: 0.01 });
     io.observe(el);
     return () => io.disconnect();
-  }, [sentinelRef.current]);
+  }, [displayed.length, moreToShow]);
 
   // Preload a small subset of images on faster connections only
   useEffect(() => {
@@ -702,6 +701,15 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
 
   return (
     <section id="gallery" className="mx-auto max-w-6xl scroll-mt-24 px-6 pb-24">
+      {/* Back to top for long galleries on mobile */}
+      <button
+        type="button"
+        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        className="fixed bottom-4 right-4 z-40 rounded-full bg-black/70 px-3 py-2 text-xs text-white backdrop-blur hover:bg-black/80 focus:outline-none md:hidden"
+        aria-label="Back to top"
+      >
+        ↑ Top
+      </button>
       <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">Galleries</h2>
       {loading && <div className="mt-6 text-sm opacity-70">Loading galleries…</div>}
       {error && <div className="mt-6 text-sm text-red-600">{error}</div>}
@@ -743,7 +751,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                         ...(item.primary?.srcset?.webp ? [{ type: 'image/webp', srcSet: item.primary.srcset.webp, sizes: item.primary?.sizes }] : []),
                       ]}
                       placeholder={item.primary?.placeholder}
-                      onLoadComplete={() => markLoaded(item.src)}
+                      onLoadComplete={() => markLoaded(item.primary?.src || item.src)}
                     />
                   </a>
                   <button
@@ -772,7 +780,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                         ...(item.primary?.srcset?.webp ? [{ type: 'image/webp', srcSet: item.primary.srcset.webp, sizes: item.primary?.sizes }] : []),
                       ]}
                       placeholder={item.primary?.placeholder}
-                      onLoadComplete={() => markLoaded(item.src)}
+                      onLoadComplete={() => markLoaded(item.primary?.src || item.src)}
                     />
                   </button>
                   <button
@@ -834,7 +842,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                         ...(item.primary?.srcset?.webp ? [{ type: 'image/webp', srcSet: item.primary.srcset.webp, sizes: item.primary?.sizes }] : []),
                       ]}
                       placeholder={item.primary?.placeholder}
-                      onLoadComplete={() => markLoaded(item.src)}
+                      onLoadComplete={() => markLoaded(item.primary?.src || item.src)}
                     />
                   </a>
                   <button
