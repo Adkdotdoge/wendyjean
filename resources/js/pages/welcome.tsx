@@ -31,6 +31,7 @@ type PageProps = SharedData & {
       sizes?: string | null;
       width?: number | null;
       height?: number | null;
+      placeholder?: string | null;
     } | null;
   })[] | null;
 };
@@ -78,6 +79,7 @@ export default function Welcome() {
           sizes: g.primary.sizes ?? undefined,
           width: g.primary.width ?? null,
           height: g.primary.height ?? null,
+          placeholder: g.primary.placeholder ?? null,
         } : undefined,
       });
       return acc;

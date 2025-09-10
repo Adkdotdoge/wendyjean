@@ -136,6 +136,8 @@ class Gallery extends Model implements HasMedia
 
         $gridWebp = $media->responsiveImages('grid_webp')->getSrcset();
         $gridJpg  = $media->responsiveImages('grid_jpg')->getSrcset();
+        $placeholder = $media->responsiveImages('grid_webp')->getPlaceholderSvg()
+            ?? $media->responsiveImages('grid_jpg')->getPlaceholderSvg();
 
         $firstFile = $media->responsiveImages('grid_webp')->files->first();
         $width  = $firstFile?->width();
@@ -147,6 +149,7 @@ class Gallery extends Model implements HasMedia
                 'webp' => $gridWebp ?: null,
                 'jpg'  => $gridJpg ?: null,
             ],
+            'placeholder' => $placeholder ?: null,
             'sizes'  => '(min-width: 768px) 50vw, 100vw',
             'width'  => $width,
             'height' => $height,

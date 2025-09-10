@@ -20,6 +20,7 @@ export type GalleryItem = {
     sizes?: string;
     width?: number | null;
     height?: number | null;
+    placeholder?: string | null;
   };
 };
 
@@ -29,6 +30,7 @@ function TiltImage({
   srcSet,
   sizes,
   sources,
+  placeholder,
   eager = true,
   preload = true,
   fetchPriority,
@@ -44,6 +46,7 @@ function TiltImage({
   srcSet?: string;
   sizes?: string;
   sources?: Array<{ type: string; srcSet: string; sizes?: string }>;
+  placeholder?: string | null;
   eager?: boolean;
   preload?: boolean;
   fetchPriority?: 'high' | 'low' | 'auto' | undefined;
@@ -210,6 +213,13 @@ function TiltImage({
       tabIndex={tabIndex}
       aria-label={alt}
     >
+      {/* LQIP placeholder layer */}
+      {!loaded && placeholder && (
+        <div className="absolute inset-0">
+          {/* SVG tiny placeholder scales nicely; avoid extra blur work */}
+          <img src={placeholder} alt="" className="absolute inset-0 h-full w-full object-cover" aria-hidden />
+        </div>
+      )}
       {Array.isArray(sources) && sources.length > 0 ? (
         <picture>
           {sources.map((s, idx) => (
@@ -312,9 +322,11 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
   const [fetched, setFetched] = useState<GalleryItem[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState<number>(8);
   const [isModalMounted, setIsModalMounted] = useState(false);
   const [isModalActive, setIsModalActive] = useState(false);
   const [modalImages, setModalImages] = useState<string[]>([]);
+  const allModalImagesRef = useRef<string[]>([]);
   const [modalTitle, setModalTitle] = useState<string | null>(null);
   const [modalDescription, setModalDescription] = useState<string | null>(null);
   const [modalSlug, setModalSlug] = useState<string | null>(null);
@@ -449,6 +461,25 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
     });
   }, [listFromProps, listFromShared, fetched]);
 
+  // Virtualize: only render a subset initially, grow as we scroll
+  const displayed: GalleryItem[] = useMemo(() => list.slice(0, Math.max(8, visibleCount)), [list, visibleCount]);
+  const moreToShow = displayed.length < list.length;
+
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (e.isIntersecting) {
+          setVisibleCount((n) => n + 6);
+        }
+      }
+    }, { root: null, rootMargin: '600px 0px', threshold: 0.01 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [sentinelRef.current]);
+
   // Preload a small subset of images on faster connections only
   useEffect(() => {
     const nav: any = typeof navigator !== 'undefined' ? navigator : {};
@@ -480,15 +511,16 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
   const [leftCol, rightCol] = useMemo(() => {
     const left: Array<{ item: GalleryItem; i: number }> = [];
     const right: Array<{ item: GalleryItem; i: number }> = [];
-    list.forEach((item, i) => {
+    displayed.forEach((item, i) => {
       (i % 2 === 0 ? left : right).push({ item, i });
     });
     return [left, right] as const;
-  }, [list]);
+  }, [displayed]);
 
   async function openGalleryModal(item: GalleryItem) {
-    const fallbackImgs = Array.isArray(item.all) && item.all.length > 0 ? item.all : [item.src];
-    setModalImages(fallbackImgs);
+    const full = Array.isArray(item.all) && item.all.length > 0 ? item.all : [item.src];
+    allModalImagesRef.current = full;
+    setModalImages(full.slice(0, 2));
     setModalTitle(item.name ?? item.alt ?? 'Gallery');
     setModalDescription(item.description ?? null);
     setIsModalMounted(true);
@@ -529,10 +561,9 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
 
       if (Array.isArray(images) && images.length > 0) {
         const list = images.filter(Boolean).map(String);
-        // Replace only if order/content changed to avoid flicker
-        if (JSON.stringify(list) !== JSON.stringify(fallbackImgs)) {
-          setModalImages(list);
-        }
+        allModalImagesRef.current = list;
+        // If we previously had 1–2, keep that and expand on demand
+        setModalImages((prev) => prev.length >= 2 ? prev : list.slice(0, 2));
       }
     } catch (e) {
       if (process.env.NODE_ENV !== 'production') {
@@ -609,6 +640,27 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
     };
   }, [isModalMounted]);
 
+  // Lazy-load more images as you scroll the modal
+  useEffect(() => {
+    if (!isModalMounted) return;
+    const el = modalScrollRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 200;
+      if (nearBottom) {
+        setModalImages((prev) => {
+          const nextLen = Math.min(allModalImagesRef.current.length, prev.length + 3);
+          if (nextLen > prev.length) {
+            return allModalImagesRef.current.slice(0, nextLen);
+          }
+          return prev;
+        });
+      }
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll as any);
+  }, [isModalMounted]);
+
   return (
     <section id="gallery" className="mx-auto max-w-6xl scroll-mt-24 px-6 pb-24">
       <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">Galleries</h2>
@@ -651,6 +703,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                       sources={[
                         ...(item.primary?.srcset?.webp ? [{ type: 'image/webp', srcSet: item.primary.srcset.webp, sizes: item.primary?.sizes }] : []),
                       ]}
+                      placeholder={item.primary?.placeholder}
                     />
                   </a>
                   <button
@@ -678,6 +731,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                       sources={[
                         ...(item.primary?.srcset?.webp ? [{ type: 'image/webp', srcSet: item.primary.srcset.webp, sizes: item.primary?.sizes }] : []),
                       ]}
+                      placeholder={item.primary?.placeholder}
                     />
                   </button>
                   <button
@@ -767,6 +821,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
         {!loading && list.length === 0 && (
           <div className="text-sm text-muted-foreground">No galleries to display yet.</div>
         )}
+        {moreToShow && <div ref={sentinelRef} className="h-4 w-full" aria-hidden />}
       </div>
       {isModalMounted && (
         <div role="dialog" aria-modal="true" className="fixed inset-0 z-50">
