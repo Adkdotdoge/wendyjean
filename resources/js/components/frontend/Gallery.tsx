@@ -359,9 +359,13 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
   const [modalDescription, setModalDescription] = useState<string | null>(null);
   const [modalSlug, setModalSlug] = useState<string | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
+  const [modalMedium, setModalMedium] = useState<string | null>(null);
+  const [modalStyle, setModalStyle] = useState<string | null>(null);
+  const [modalAttributes, setModalAttributes] = useState<Record<string, string> | null>(null);
   const modalScrollRef = useRef<HTMLDivElement | null>(null);
   // Pointer capability (used for perf heuristics in this component)
   const coarsePointer = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+  const [modalDetailsOpen, setModalDetailsOpen] = useState(false);
 
   const page = usePage<PageProps>();
   const sharedGalleriesRaw = ((): any => {
@@ -607,7 +611,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
       const res = await fetch(url, { headers: { Accept: 'application/json' } });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const raw = await res.json();
-      // Accept shapes: { images_urls, name, description } | { data: { ... } }
+      // Accept shapes: { images_urls, name, description, medium, style, attributes } | { data: { ... } }
       const payload: any = (raw && typeof raw === 'object' && 'data' in raw) ? (raw as any).data : raw;
       const images = Array.isArray(payload?.images_urls) ? payload.images_urls : null;
 
@@ -619,6 +623,20 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
       }
       if (typeof payload?.slug === 'string') {
         setModalSlug(payload.slug);
+      }
+      if (typeof payload?.medium === 'string') setModalMedium(payload.medium);
+      if (typeof payload?.style === 'string') setModalStyle(payload.style);
+      if (payload?.attributes && typeof payload.attributes === 'object') {
+        try {
+          const obj = payload.attributes as Record<string, any>;
+          const normalized: Record<string, string> = {};
+          Object.keys(obj).forEach((k) => {
+            const v = obj[k];
+            if (v == null) return;
+            normalized[String(k)] = String(v);
+          });
+          setModalAttributes(normalized);
+        } catch {}
       }
 
       if (Array.isArray(images) && images.length > 0) {
@@ -989,48 +1007,96 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
             style={{ WebkitOverflowScrolling: 'touch' } as any}
           >
             <div className="mx-auto max-w-screen-2xl">
-              <div className="grid grid-cols-1 place-items-center gap-6">
-                {modalImages.map((src, i) => (
-                  <div
-                    key={`${src}-${i}`}
-                    className="w-full max-w-3xl mx-auto overflow-hidden rounded-lg transition-opacity duration-200 ease-out"
-                  >
-                    <TiltImage
-                      src={src}
-                      alt={`Gallery image ${i + 1}`}
-                      className="w-full h-auto max-h-[100svh] object-contain cursor-zoom-in bg-transparent dark:bg-transparent"
-                      containerClassName="rounded-lg"
-                      eager={i === 0}
-                      fetchPriority={i === 0 ? 'high' : 'low'}
-                      sizes="100vw"
-                      disableSkeleton
-                      tabIndex={0}
-                    />
-                    {i === 0 && (modalTitle || modalDescription) && (
-                      <div className="mx-auto mt-3 max-w-3xl text-left">
-                        {modalTitle && (
-                          <h3 className="text-base font-semibold text-white/95 dark:text-white">{modalTitle}</h3>
-                        )}
-                        {modalDescription && (
-                          <div className="mt-2 whitespace-pre-wrap text-sm text-white/85 dark:text-white/80">
-                            {modalDescription}
-                          </div>
-                        )}
-                        {modalSlug && (
-                          <div className="mt-3">
-                            <Link
-                              href={`/galleries/${modalSlug}`}
-                              className="inline-flex items-center gap-1 rounded-md bg-white/10 px-3 py-1.5 text-sm text-white hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/40"
-                            >
-                              Read more
-                              <span aria-hidden>→</span>
-                            </Link>
-                          </div>
-                        )}
+              {/* Title pinned at top */}
+              {modalTitle && (
+                <h3 className="mb-4 text-center text-lg font-semibold text-white/95 dark:text-white">
+                  {modalTitle}
+                </h3>
+              )}
+
+              {/* Two-column layout on desktop: images left (span 2), details right */}
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-3 md:items-start">
+                {/* Images column */}
+                <div className="md:col-span-2">
+                  <div className="grid grid-cols-1 place-items-center gap-6">
+                    {modalImages.map((src, i) => (
+                      <div
+                        key={`${src}-${i}`}
+                        className="w-full max-w-3xl mx-auto overflow-hidden rounded-lg transition-opacity duration-200 ease-out"
+                      >
+                        <TiltImage
+                          src={src}
+                          alt={`Gallery image ${i + 1}`}
+                          className="w-full h-auto max-h-[100svh] object-contain cursor-zoom-in bg-transparent dark:bg-transparent"
+                          containerClassName="rounded-lg"
+                          eager={i === 0}
+                          fetchPriority={i === 0 ? 'high' : 'low'}
+                          sizes="100vw"
+                          disableSkeleton
+                          tabIndex={0}
+                        />
                       </div>
-                    )}
+                    ))}
                   </div>
-                ))}
+                </div>
+
+                {/* Details column */}
+                {(modalDescription || modalSlug || modalMedium || modalStyle || (modalAttributes && Object.keys(modalAttributes).length)) && (
+                  <aside className="md:col-span-1">
+                    {/* Mobile toggle */}
+                    <div className="md:hidden">
+                      <button
+                        type="button"
+                        onClick={() => setModalDetailsOpen((v) => !v)}
+                        className="mb-2 inline-flex items-center gap-2 rounded-md bg-white/10 px-3 py-1.5 text-sm text-white hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/40"
+                        aria-expanded={modalDetailsOpen}
+                        aria-controls="modal-details"
+                      >
+                        {modalDetailsOpen ? 'Hide details' : 'Show details'}
+                      </button>
+                    </div>
+
+                    <div
+                      id="modal-details"
+                      className={[
+                        'rounded-md bg-white/5 p-4 text-sm text-white/85 ring-1 ring-white/10',
+                        modalDetailsOpen ? 'block' : 'hidden md:block',
+                      ].join(' ')}
+                    >
+                      {modalMedium && (
+                        <div className="mb-2"><span className="font-medium">Medium:</span> {modalMedium}</div>
+                      )}
+                      {modalStyle && (
+                        <div className="mb-2"><span className="font-medium">Style:</span> {modalStyle}</div>
+                      )}
+                      {modalDescription && (
+                        <div className="whitespace-pre-wrap leading-relaxed">
+                          {modalDescription}
+                        </div>
+                      )}
+                      {modalAttributes && Object.keys(modalAttributes).length > 0 && (
+                        <div className="mt-3 space-y-1">
+                          {Object.entries(modalAttributes).map(([key, val]) => (
+                            <div key={key} className="text-sm">
+                              <span className="font-medium">{key}:</span> {val}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {modalSlug && (
+                        <div className="mt-3">
+                          <Link
+                            href={`/galleries/${modalSlug}`}
+                            className="inline-flex items-center gap-1 rounded-md bg-white/10 px-3 py-1.5 text-white hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/40"
+                          >
+                            View full gallery
+                            <span aria-hidden>→</span>
+                          </Link>
+                        </div>
+                      )}
+                    </div>
+                  </aside>
+                )}
               </div>
             </div>
           </div>

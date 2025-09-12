@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Galleries\Schemas;
 use Filament\Forms\Components\SpatieMediaLibraryFileUpload;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\KeyValue;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Form;
 use Filament\Schemas\Schema as FilamentSchema;
@@ -27,6 +28,24 @@ class GalleryForm
             Textarea::make('description')
                 ->rows(3)
                 ->placeholder('Short description of this gallery…'),
+
+            TextInput::make('medium')
+                ->label('Medium')
+                ->placeholder('e.g., Mixed media – cut paper and collage')
+                ->maxLength(190),
+
+            TextInput::make('style')
+                ->label('Style')
+                ->placeholder('e.g., Figurative')
+                ->maxLength(190),
+
+            KeyValue::make('attributes')
+                ->label('Additional details')
+                ->keyLabel('Label')
+                ->valueLabel('Text')
+                ->reorderable()
+                ->addActionLabel('Add detail')
+                ->helperText('Add any extra descriptors, like "Dedicated to" or materials.'),
 
             Toggle::make('is_active')
                 ->default(true),

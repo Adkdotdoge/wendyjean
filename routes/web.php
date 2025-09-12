@@ -48,6 +48,9 @@ Route::get('/api/galleries', function () {
             'primary_url'  => $g->primary_url,
             'primary'      => $g->primaryResponsive(),
             'images_urls'  => $g->images_urls,
+            'medium'       => $g->medium,
+            'style'        => $g->style,
+            'attributes'   => $g->attributes ?? [],
         ])->values()
     );
 });
@@ -67,6 +70,9 @@ Route::get('/api/galleries/{slug}', function (string $slug) {
         'description' => $gallery->description,
         'primary_url' => $gallery->primary_url,
         'images_urls' => $imagesUrls,
+        'medium' => $gallery->medium,
+        'style' => $gallery->style,
+        'attributes' => $gallery->attributes ?? [],
         // optional compatibility alias
         'images' => $imagesUrls,
     ]);

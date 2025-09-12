@@ -147,6 +147,12 @@ class GalleriesTable
                     ->searchable(),
                 TextColumn::make('slug')
                     ->searchable(),
+                TextColumn::make('medium')
+                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->wrap(),
+                TextColumn::make('style')
+                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->wrap(),
                 IconColumn::make('is_active')
                     ->boolean(),
                 TextColumn::make('created_at')

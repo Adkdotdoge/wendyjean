@@ -17,6 +17,9 @@ class Gallery extends Model implements HasMedia
         'name',
         'slug',
         'description',
+        'medium',
+        'style',
+        'attributes',
         'is_active',
         'order_column',
     ];
@@ -31,6 +34,7 @@ class Gallery extends Model implements HasMedia
     protected $casts = [
         'is_active' => 'boolean',
         'order_column' => 'integer',
+        'attributes' => 'array',
     ];
 
     public function registerMediaCollections(): void
