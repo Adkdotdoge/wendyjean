@@ -20,6 +20,9 @@ class Gallery extends Model implements HasMedia
         'medium',
         'style',
         'attributes',
+        'starting_offer',
+        'current_offer',
+        'is_sold',
         'is_active',
         'order_column',
     ];
@@ -35,6 +38,9 @@ class Gallery extends Model implements HasMedia
         'is_active' => 'boolean',
         'order_column' => 'integer',
         'attributes' => 'array',
+        'starting_offer' => 'decimal:2',
+        'current_offer' => 'decimal:2',
+        'is_sold' => 'boolean',
     ];
 
     public function registerMediaCollections(): void
@@ -51,6 +57,13 @@ class Gallery extends Model implements HasMedia
 
     public function registerMediaConversions(?SpatieMedia $media = null): void
     {
+        // Tiny admin preview (sync) for fast Filament tables/forms
+        $this
+            ->addMediaConversion('admin_thumb')
+            ->format('webp')
+            ->fit(Fit::Contain, 256, 256)
+            ->performOnCollections('images');
+
         // Grid conversions (used in cards/lists)
         $this
             ->addMediaConversion('grid_webp')

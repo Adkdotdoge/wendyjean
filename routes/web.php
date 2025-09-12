@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Spatie\MediaLibrary\MediaCollections\Models\Media as SpatieMedia;
 use App\Http\Controllers\Public\ContactMessageController;
+use App\Http\Controllers\Public\OfferController;
 use App\Models\Gallery as GalleryModel;
 
 Route::get('/', function () {
@@ -51,6 +52,9 @@ Route::get('/api/galleries', function () {
             'medium'       => $g->medium,
             'style'        => $g->style,
             'attributes'   => $g->attributes ?? [],
+            'starting_offer' => $g->starting_offer,
+            'current_offer'  => $g->current_offer,
+            'is_sold'        => $g->is_sold,
         ])->values()
     );
 });
@@ -73,6 +77,9 @@ Route::get('/api/galleries/{slug}', function (string $slug) {
         'medium' => $gallery->medium,
         'style' => $gallery->style,
         'attributes' => $gallery->attributes ?? [],
+        'starting_offer' => $gallery->starting_offer,
+        'current_offer'  => $gallery->current_offer,
+        'is_sold'        => $gallery->is_sold,
         // optional compatibility alias
         'images' => $imagesUrls,
     ]);
@@ -87,6 +94,10 @@ Route::get('/media/{media}', function (Request $request, SpatieMedia $media) {
 Route::post('/contact', [ContactMessageController::class, 'store'])
     ->name('contact.store')
     ->middleware('throttle:10,1'); // optional: rate-limit bots
+
+// Offers
+Route::post('/api/galleries/{slug}/offer', [OfferController::class, 'store'])
+    ->middleware('throttle:8,1');
 // --- Gallery pages (Inertia) ---
 Route::get('/galleries', function () {
     $galleries = GalleryModel::query()

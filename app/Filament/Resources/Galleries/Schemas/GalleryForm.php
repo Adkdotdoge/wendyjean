@@ -7,6 +7,7 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\KeyValue;
 use Filament\Forms\Components\Toggle;
+use Filament\Forms\Components\TextInput as NumberInput;
 use Filament\Forms\Form;
 use Filament\Schemas\Schema as FilamentSchema;
 use Illuminate\Support\Str;
@@ -46,6 +47,28 @@ class GalleryForm
                 ->reorderable()
                 ->addActionLabel('Add detail')
                 ->helperText('Add any extra descriptors, like "Dedicated to" or materials.'),
+
+            NumberInput::make('starting_offer')
+                ->label('Starting offer (USD)')
+                ->numeric()
+                ->inputMode('decimal')
+                ->minValue(0)
+                ->step('0.01')
+                ->prefix('$')
+                ->helperText('Displayed to visitors as a starting point.'),
+
+            NumberInput::make('current_offer')
+                ->label('Current offer (USD)')
+                ->numeric()
+                ->inputMode('decimal')
+                ->minValue(0)
+                ->step('0.01')
+                ->prefix('$')
+                ->helperText('Auto-updated when offers arrive; you can override.'),
+
+            Toggle::make('is_sold')
+                ->label('Sold')
+                ->helperText('When enabled, the public offer form is disabled.'),
 
             Toggle::make('is_active')
                 ->default(true),

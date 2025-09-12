@@ -18,12 +18,30 @@ class GalleriesTable
     public static function configure(Table $table): Table
     {
         return $table
+            ->modifyQueryUsing(fn ($query) => $query->with('media'))
             ->columns([
                 ImageColumn::make('preview')
                     ->label('Preview')
                     ->size(64)
                     ->square()
                     ->getStateUsing(function ($record) {
+                        // Prefer lightweight conversion for admin tables
+                        try {
+                            if (method_exists($record, 'getFirstMedia')) {
+                                $media = $record->getFirstMedia('images');
+                                if ($media) {
+                                    // Try temporary URL for the conversion if disk supports it
+                                    try {
+                                        return $media->getTemporaryUrl(\Illuminate\Support\Carbon::now()->addMinutes(10), 'admin_thumb');
+                                    } catch (\Throwable $e) {
+                                        // Fallback to regular conversion URL
+                                        return $media->getUrl('admin_thumb');
+                                    }
+                                }
+                            }
+                        } catch (\Throwable $e) {
+                            // fall through to existing heuristics
+                        }
                         // 1) Spatie Media Library — prefer temporary (signed) URLs
                         try {
                             if (method_exists($record, 'getFirstTemporaryUrl')) {
@@ -146,7 +164,17 @@ class GalleriesTable
                 TextColumn::make('name')
                     ->searchable(),
                 TextColumn::make('slug')
-                    ->searchable(),
+                    ->searchable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('current_offer')
+                    ->label('Offer')
+                    ->numeric(2)
+                    ->prefix('$')
+                    ->placeholder('—')
+                    ->toggleable(isToggledHiddenByDefault: true),
+                IconColumn::make('is_sold')
+                    ->label('Sold')
+                    ->boolean(),
                 TextColumn::make('medium')
                     ->toggleable(isToggledHiddenByDefault: true)
                     ->wrap(),

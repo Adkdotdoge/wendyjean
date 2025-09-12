@@ -362,6 +362,15 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
   const [modalMedium, setModalMedium] = useState<string | null>(null);
   const [modalStyle, setModalStyle] = useState<string | null>(null);
   const [modalAttributes, setModalAttributes] = useState<Record<string, string> | null>(null);
+  const [modalIsSold, setModalIsSold] = useState<boolean>(false);
+  const [modalStarting, setModalStarting] = useState<string | null>(null);
+  const [modalCurrent, setModalCurrent] = useState<string | null>(null);
+  const [offerName, setOfferName] = useState('');
+  const [offerEmail, setOfferEmail] = useState('');
+  const [offerAmount, setOfferAmount] = useState('');
+  const [offerMessage, setOfferMessage] = useState('');
+  const [offerSubmitting, setOfferSubmitting] = useState(false);
+  const [offerSuccess, setOfferSuccess] = useState<string | null>(null);
   const modalScrollRef = useRef<HTMLDivElement | null>(null);
   // Pointer capability (used for perf heuristics in this component)
   const coarsePointer = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
@@ -638,6 +647,9 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
           setModalAttributes(normalized);
         } catch {}
       }
+      if (typeof payload?.is_sold === 'boolean') setModalIsSold(!!payload.is_sold);
+      if (payload?.starting_offer != null) setModalStarting(String(payload.starting_offer));
+      if (payload?.current_offer != null) setModalCurrent(String(payload.current_offer));
 
       if (Array.isArray(images) && images.length > 0) {
         const list = images.filter(Boolean).map(String);
@@ -1063,6 +1075,15 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                         modalDetailsOpen ? 'block' : 'hidden md:block',
                       ].join(' ')}
                     >
+                      {modalIsSold && (
+                        <div className="mb-2 inline-flex items-center gap-2 rounded bg-white/10 px-2 py-1 text-xs uppercase tracking-wide text-white/80">Sold</div>
+                      )}
+                      {modalStarting && (
+                        <div className="mb-1"><span className="font-medium">Starting offer:</span> ${modalStarting}</div>
+                      )}
+                      {modalCurrent && (
+                        <div className="mb-2"><span className="font-medium">Current offer:</span> ${modalCurrent}</div>
+                      )}
                       {modalMedium && (
                         <div className="mb-2"><span className="font-medium">Medium:</span> {modalMedium}</div>
                       )}
@@ -1093,6 +1114,85 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                             <span aria-hidden>→</span>
                           </Link>
                         </div>
+                      )}
+
+                      {/* Offer form */}
+                      {!modalIsSold && (
+                      <div className="mt-4 border-t border-white/10 pt-3">
+                        <div className="mb-2 text-xs uppercase tracking-wide text-white/70">Submit an offer</div>
+                        <form
+                          onSubmit={async (e) => {
+                            e.preventDefault();
+                            if (!modalSlug) return;
+                            setOfferSubmitting(true);
+                            setOfferSuccess(null);
+                            try {
+                              const token = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement | null)?.content;
+                              const res = await fetch(`/api/galleries/${encodeURIComponent(modalSlug)}/offer`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', ...(token ? { 'X-CSRF-TOKEN': token } : {}) },
+                                body: JSON.stringify({
+                                  name: offerName,
+                                  email: offerEmail,
+                                  amount: parseFloat(offerAmount),
+                                  message: offerMessage || undefined,
+                                }),
+                              });
+                              const data = await res.json();
+                              if (!res.ok) throw new Error(data?.message || 'Failed to submit');
+                              setOfferSuccess(data?.message || 'Offer submitted. Thank you!');
+                            } catch (err: any) {
+                              setOfferSuccess(err?.message || 'Failed to submit');
+                            } finally {
+                              setOfferSubmitting(false);
+                            }
+                          }}
+                          className="space-y-2"
+                        >
+                          <input
+                            type="text"
+                            placeholder="Your name"
+                            value={offerName}
+                            onChange={(e) => setOfferName(e.target.value)}
+                            required
+                            className="w-full rounded-md bg-white/10 px-3 py-2 text-white placeholder-white/60 outline-none ring-1 ring-white/10 focus:ring-2"
+                          />
+                          <input
+                            type="email"
+                            placeholder="Email"
+                            value={offerEmail}
+                            onChange={(e) => setOfferEmail(e.target.value)}
+                            required
+                            className="w-full rounded-md bg-white/10 px-3 py-2 text-white placeholder-white/60 outline-none ring-1 ring-white/10 focus:ring-2"
+                          />
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            placeholder="Offer amount (USD)"
+                            value={offerAmount}
+                            onChange={(e) => setOfferAmount(e.target.value)}
+                            required
+                            className="w-full rounded-md bg-white/10 px-3 py-2 text-white placeholder-white/60 outline-none ring-1 ring-white/10 focus:ring-2"
+                          />
+                          <textarea
+                            placeholder="Message (optional)"
+                            value={offerMessage}
+                            onChange={(e) => setOfferMessage(e.target.value)}
+                            className="w-full rounded-md bg-white/10 px-3 py-2 text-white placeholder-white/60 outline-none ring-1 ring-white/10 focus:ring-2"
+                          />
+                          <button
+                            type="submit"
+                            disabled={offerSubmitting}
+                            className="w-full rounded-md bg-white/10 px-3 py-2 text-sm text-white hover:bg-white/20 disabled:opacity-50"
+                          >
+                            {offerSubmitting ? 'Submitting…' : 'Submit offer'}
+                          </button>
+                          {offerSuccess && (
+                            <div className="text-xs text-white/80">{offerSuccess}</div>
+                          )}
+                        </form>
+                      </div>
                       )}
                     </div>
                   </aside>
