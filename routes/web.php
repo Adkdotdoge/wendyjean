@@ -133,3 +133,8 @@ Route::get('/galleries/{slug}', function (string $slug) {
         ],
     ]);
 })->name('galleries.show');
+
+// --- ThreeD standalone page ---
+Route::get('/3d', function () {
+    return Inertia::render('three-d');
+})->name('threeD');

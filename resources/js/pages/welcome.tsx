@@ -6,6 +6,7 @@ import Hero from '@/components/frontend/Hero';
 import About from '@/components/frontend/About';
 import Gallery, { type GalleryItem as GalleryItemType } from '@/components/frontend/Gallery';
 import ContactForm from '@/components/frontend/ContactForm';
+import ThreeD from '@/components/frontend/3d';
 
 type PageProps = SharedData & {
   gallery: {
