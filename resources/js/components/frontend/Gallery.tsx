@@ -375,6 +375,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
   // Pointer capability (used for perf heuristics in this component)
   const coarsePointer = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
   const [modalDetailsOpen, setModalDetailsOpen] = useState(false);
+  const [offerOpen, setOfferOpen] = useState(false);
 
   const page = usePage<PageProps>();
   const sharedGalleriesRaw = ((): any => {
@@ -1071,12 +1072,12 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                     <div
                       id="modal-details"
                       className={[
-                        'rounded-md bg-white/5 p-4 text-sm text-white/85 ring-1 ring-white/10',
+                        'rounded-md bg-white/90 p-4 text-sm text-neutral-900 ring-1 ring-neutral-200 shadow-md',
                         modalDetailsOpen ? 'block' : 'hidden md:block',
                       ].join(' ')}
                     >
                       {modalIsSold && (
-                        <div className="mb-2 inline-flex items-center gap-2 rounded bg-white/10 px-2 py-1 text-xs uppercase tracking-wide text-white/80">Sold</div>
+                        <div className="mb-2 inline-flex items-center gap-2 rounded bg-neutral-100 px-2 py-1 text-xs uppercase tracking-wide text-neutral-700">Sold</div>
                       )}
                       {modalStarting && (
                         <div className="mb-1"><span className="font-medium">Starting offer:</span> ${modalStarting}</div>
@@ -1108,7 +1109,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                         <div className="mt-3">
                           <Link
                             href={`/galleries/${modalSlug}`}
-                            className="inline-flex items-center gap-1 rounded-md bg-white/10 px-3 py-1.5 text-white hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/40"
+                            className="inline-flex items-center gap-1 rounded-md bg-neutral-900 px-3 py-1.5 text-white hover:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-sky-400"
                           >
                             View full gallery
                             <span aria-hidden>→</span>
@@ -1118,8 +1119,19 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
 
                       {/* Offer form */}
                       {!modalIsSold && (
-                      <div className="mt-4 border-t border-white/10 pt-3">
-                        <div className="mb-2 text-xs uppercase tracking-wide text-white/70">Submit an offer</div>
+                      <div className="mt-4 rounded-md bg-white/90 p-4 ring-1 ring-neutral-200 shadow-md">
+                        <div className="mb-2 flex items-center justify-between">
+                          <div className="text-xs uppercase tracking-wide text-neutral-700">Submit an offer</div>
+                          <button
+                            type="button"
+                            onClick={() => setOfferOpen((v) => !v)}
+                            className="inline-flex items-center gap-2 rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-sky-400"
+                            aria-expanded={offerOpen}
+                          >
+                            {offerOpen ? 'Hide' : 'Make Offer'}
+                          </button>
+                        </div>
+                        {offerOpen && (
                         <form
                           onSubmit={async (e) => {
                             e.preventDefault();
@@ -1155,7 +1167,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                             value={offerName}
                             onChange={(e) => setOfferName(e.target.value)}
                             required
-                            className="w-full rounded-md bg-white/10 px-3 py-2 text-white placeholder-white/60 outline-none ring-1 ring-white/10 focus:ring-2"
+                            className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-neutral-900 placeholder-neutral-500 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500"
                           />
                           <input
                             type="email"
@@ -1163,7 +1175,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                             value={offerEmail}
                             onChange={(e) => setOfferEmail(e.target.value)}
                             required
-                            className="w-full rounded-md bg-white/10 px-3 py-2 text-white placeholder-white/60 outline-none ring-1 ring-white/10 focus:ring-2"
+                            className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-neutral-900 placeholder-neutral-500 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500"
                           />
                           <input
                             type="number"
@@ -1173,25 +1185,26 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                             value={offerAmount}
                             onChange={(e) => setOfferAmount(e.target.value)}
                             required
-                            className="w-full rounded-md bg-white/10 px-3 py-2 text-white placeholder-white/60 outline-none ring-1 ring-white/10 focus:ring-2"
+                            className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-neutral-900 placeholder-neutral-500 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500"
                           />
                           <textarea
                             placeholder="Message (optional)"
                             value={offerMessage}
                             onChange={(e) => setOfferMessage(e.target.value)}
-                            className="w-full rounded-md bg-white/10 px-3 py-2 text-white placeholder-white/60 outline-none ring-1 ring-white/10 focus:ring-2"
+                            className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-neutral-900 placeholder-neutral-500 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500"
                           />
                           <button
                             type="submit"
                             disabled={offerSubmitting}
-                            className="w-full rounded-md bg-white/10 px-3 py-2 text-sm text-white hover:bg-white/20 disabled:opacity-50"
+                            className="w-full rounded-md bg-neutral-900 px-3 py-2 text-sm text-white hover:bg-neutral-800 disabled:opacity-50"
                           >
                             {offerSubmitting ? 'Submitting…' : 'Submit offer'}
                           </button>
                           {offerSuccess && (
-                            <div className="text-xs text-white/80">{offerSuccess}</div>
+                            <div className="text-xs text-neutral-700">{offerSuccess}</div>
                           )}
                         </form>
+                        )}
                       </div>
                       )}
                     </div>

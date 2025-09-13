@@ -83,14 +83,15 @@ class Gallery extends Model implements HasMedia
         $this
             ->addMediaConversion('hero_webp')
             ->format('webp')
-            ->fit(Fit::Cover, 2048, 1152)
+            // Some Spatie\Image versions do not provide Fit::Cover; use Contain for compatibility
+            ->fit(Fit::Contain, 2048, 1152)
             ->withResponsiveImages()
             ->queued();
 
         $this
             ->addMediaConversion('hero_jpg')
             ->format('jpg')
-            ->fit(Fit::Cover, 2048, 1152)
+            ->fit(Fit::Contain, 2048, 1152)
             ->withResponsiveImages()
             ->queued();
     }

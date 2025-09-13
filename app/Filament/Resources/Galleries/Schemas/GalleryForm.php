@@ -7,7 +7,7 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\KeyValue;
 use Filament\Forms\Components\Toggle;
-use Filament\Forms\Components\TextInput as NumberInput;
+// Use TextInput with ->numeric() for currency fields
 use Filament\Forms\Form;
 use Filament\Schemas\Schema as FilamentSchema;
 use Illuminate\Support\Str;
@@ -48,7 +48,7 @@ class GalleryForm
                 ->addActionLabel('Add detail')
                 ->helperText('Add any extra descriptors, like "Dedicated to" or materials.'),
 
-            NumberInput::make('starting_offer')
+            TextInput::make('starting_offer')
                 ->label('Starting offer (USD)')
                 ->numeric()
                 ->inputMode('decimal')
@@ -57,7 +57,7 @@ class GalleryForm
                 ->prefix('$')
                 ->helperText('Displayed to visitors as a starting point.'),
 
-            NumberInput::make('current_offer')
+            TextInput::make('current_offer')
                 ->label('Current offer (USD)')
                 ->numeric()
                 ->inputMode('decimal')
