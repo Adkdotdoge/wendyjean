@@ -105,9 +105,13 @@ export default function ThreeDImages() {
   const requestGyro = async () => {
     try {
       const AnyDO = (window as any).DeviceOrientationEvent;
+      const AnyDM = (window as any).DeviceMotionEvent;
       if (AnyDO && typeof AnyDO.requestPermission === 'function') {
         const res = await AnyDO.requestPermission();
         if (res !== 'granted') return;
+      }
+      if (AnyDM && typeof AnyDM.requestPermission === 'function') {
+        try { await AnyDM.requestPermission(); } catch {}
       }
       setGyroEnabled(true);
     } catch {
@@ -118,12 +122,28 @@ export default function ThreeDImages() {
   return (
     <div
       ref={containerRef}
-      className="relative w-screen h-screen"
+      className="relative w-full h-[100svh] md:h-screen"
       onPointerMove={handlePointerMove}
       onPointerLeave={handlePointerLeave}
+      onTouchMove={(e) => {
+        if (gyroEnabled) return;
+        if (!containerRef.current) return;
+        const t = e.touches && e.touches[0];
+        if (!t) return;
+        const rect = containerRef.current.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        const nx = (t.clientX - cx) / rect.width;
+        const ny = (t.clientY - cy) / rect.height;
+        const tx = -ny * 20;
+        const ty = nx * 20;
+        target.current = { x: tx, y: ty };
+      }}
+      onTouchEnd={() => { if (!gyroEnabled) target.current = { x: 0, y: 0 }; }}
       style={{
         perspective: "1400px",
         transformStyle: "preserve-3d",
+        touchAction: 'none',
         transform: (() => {
           const tx = tilt.y * (maxParallax / 10); // reuse tilt range (±10) → px
           const ty = tilt.x * (maxParallax / 10);
@@ -169,7 +189,7 @@ export default function ThreeDImages() {
         }}
       />
       {/* Enable motion button for iOS permission (shows on coarse devices when not enabled) */}
-      {isCoarse && !gyroEnabled && !prefersReducedMotion && (
+      {(!gyroEnabled && !prefersReducedMotion) && (
         <button
           type="button"
           onClick={requestGyro}
