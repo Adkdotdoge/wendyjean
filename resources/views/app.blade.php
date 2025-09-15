@@ -39,6 +39,28 @@
         <link rel="preconnect" href="https://fonts.bunny.net">
         <link href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600" rel="stylesheet" />
 
+        {{-- Open Graph / Facebook defaults --}}
+        @php
+            $ogLocale = str_replace('-', '_', app()->getLocale());
+            if ($ogLocale === 'en') {
+                $ogLocale = 'en_US';
+            }
+            $appName = config('app.name', 'Laravel');
+            $defaultOgImage = asset('apple-touch-icon.png');
+            $currentUrl = url()->current();
+        @endphp
+        <meta property="og:site_name" content="{{ $appName }}">
+        <meta property="og:type" content="website">
+        <meta property="og:locale" content="{{ $ogLocale }}">
+        <meta property="og:url" content="{{ $currentUrl }}">
+        <meta property="og:title" content="{{ $appName }}">
+        <meta property="og:description" content="{{ config('app.description', $appName) }}">
+        <meta property="og:image" content="{{ $defaultOgImage }}">
+        <meta property="og:image:alt" content="{{ $appName }}">
+        @if (env('FACEBOOK_APP_ID'))
+            <meta property="fb:app_id" content="{{ env('FACEBOOK_APP_ID') }}">
+        @endif
+
         @viteReactRefresh
         @vite(['resources/js/app.tsx'])
         @inertiaHead
