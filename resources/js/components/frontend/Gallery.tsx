@@ -834,24 +834,25 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                       onLoadComplete={() => markLoaded(item.primary?.src || item.src)}
                     />
                   </a>
-                  <div className="p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="truncate text-sm font-medium">{item.name ?? item.alt}</div>
-                      {item.is_sold && (
-                        <span className="shrink-0 rounded bg-neutral-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-neutral-100 dark:text-neutral-900">Sold</span>
+                  {(item.is_sold || item.medium || item.style || item.current_offer || item.starting_offer) && (
+                    <div className="p-3">
+                      <div className="flex items-center gap-2">
+                        {item.is_sold && (
+                          <span className="shrink-0 rounded bg-neutral-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-neutral-100 dark:text-neutral-900">Sold</span>
+                        )}
+                      </div>
+                      {(item.medium || item.style) && (
+                        <div className="mt-1 truncate text-xs text-neutral-600 dark:text-neutral-300">
+                          {[item.medium, item.style].filter(Boolean).join(' • ')}
+                        </div>
+                      )}
+                      {(item.current_offer || item.starting_offer) && (
+                        <div className="mt-1 text-xs text-neutral-700 dark:text-neutral-200">
+                          {item.current_offer ? `Current: $${String(item.current_offer)}` : item.starting_offer ? `Starting: $${String(item.starting_offer)}` : ''}
+                        </div>
                       )}
                     </div>
-                    {(item.medium || item.style) && (
-                      <div className="mt-1 truncate text-xs text-neutral-600 dark:text-neutral-300">
-                        {[item.medium, item.style].filter(Boolean).join(' • ')}
-                      </div>
-                    )}
-                    {(item.current_offer || item.starting_offer) && (
-                      <div className="mt-1 text-xs text-neutral-700 dark:text-neutral-200">
-                        {item.current_offer ? `Current: $${String(item.current_offer)}` : item.starting_offer ? `Starting: $${String(item.starting_offer)}` : ''}
-                      </div>
-                    )}
-                  </div>
+                  )}
                   <button
                     type="button"
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
@@ -881,24 +882,25 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                       onLoadComplete={() => markLoaded(item.src)}
                     />
                   </button>
-                  <div className="p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="truncate text-sm font-medium">{item.name ?? item.alt}</div>
-                      {item.is_sold && (
-                        <span className="shrink-0 rounded bg-neutral-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-neutral-100 dark:text-neutral-900">Sold</span>
+                  {(item.is_sold || item.medium || item.style || item.current_offer || item.starting_offer) && (
+                    <div className="p-3">
+                      <div className="flex items-center gap-2">
+                        {item.is_sold && (
+                          <span className="shrink-0 rounded bg-neutral-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-neutral-100 dark:text-neutral-900">Sold</span>
+                        )}
+                      </div>
+                      {(item.medium || item.style) && (
+                        <div className="mt-1 truncate text-xs text-neutral-600 dark:text-neutral-300">
+                          {[item.medium, item.style].filter(Boolean).join(' • ')}
+                        </div>
+                      )}
+                      {(item.current_offer || item.starting_offer) && (
+                        <div className="mt-1 text-xs text-neutral-700 dark:text-neutral-200">
+                          {item.current_offer ? `Current: $${String(item.current_offer)}` : item.starting_offer ? `Starting: $${String(item.starting_offer)}` : ''}
+                        </div>
                       )}
                     </div>
-                    {(item.medium || item.style) && (
-                      <div className="mt-1 truncate text-xs text-neutral-600 dark:text-neutral-300">
-                        {[item.medium, item.style].filter(Boolean).join(' • ')}
-                      </div>
-                    )}
-                    {(item.current_offer || item.starting_offer) && (
-                      <div className="mt-1 text-xs text-neutral-700 dark:text-neutral-200">
-                        {item.current_offer ? `Current: $${String(item.current_offer)}` : item.starting_offer ? `Starting: $${String(item.starting_offer)}` : ''}
-                      </div>
-                    )}
-                  </div>
+                  )}
                   <button
                     type="button"
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
@@ -965,24 +967,25 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                       onLoadComplete={() => markLoaded(item.primary?.src || item.src)}
                     />
                   </a>
-                  <div className="p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="truncate text-sm font-medium">{item.name ?? item.alt}</div>
-                      {item.is_sold && (
-                        <span className="shrink-0 rounded bg-neutral-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-neutral-100 dark:text-neutral-900">Sold</span>
+                  {(item.is_sold || item.medium || item.style || item.current_offer || item.starting_offer) && (
+                    <div className="p-3">
+                      <div className="flex items-center gap-2">
+                        {item.is_sold && (
+                          <span className="shrink-0 rounded bg-neutral-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-neutral-100 dark:text-neutral-900">Sold</span>
+                        )}
+                      </div>
+                      {(item.medium || item.style) && (
+                        <div className="mt-1 truncate text-xs text-neutral-600 dark:text-neutral-300">
+                          {[item.medium, item.style].filter(Boolean).join(' • ')}
+                        </div>
+                      )}
+                      {(item.current_offer || item.starting_offer) && (
+                        <div className="mt-1 text-xs text-neutral-700 dark:text-neutral-200">
+                          {item.current_offer ? `Current: $${String(item.current_offer)}` : item.starting_offer ? `Starting: $${String(item.starting_offer)}` : ''}
+                        </div>
                       )}
                     </div>
-                    {(item.medium || item.style) && (
-                      <div className="mt-1 truncate text-xs text-neutral-600 dark:text-neutral-300">
-                        {[item.medium, item.style].filter(Boolean).join(' • ')}
-                      </div>
-                    )}
-                    {(item.current_offer || item.starting_offer) && (
-                      <div className="mt-1 text-xs text-neutral-700 dark:text-neutral-200">
-                        {item.current_offer ? `Current: $${String(item.current_offer)}` : item.starting_offer ? `Starting: $${String(item.starting_offer)}` : ''}
-                      </div>
-                    )}
-                  </div>
+                  )}
                   <button
                     type="button"
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
@@ -1012,24 +1015,25 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                       onLoadComplete={() => markLoaded(item.primary?.src || item.src)}
                     />
                   </button>
-                  <div className="p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="truncate text-sm font-medium">{item.name ?? item.alt}</div>
-                      {item.is_sold && (
-                        <span className="shrink-0 rounded bg-neutral-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-neutral-100 dark:text-neutral-900">Sold</span>
+                  {(item.is_sold || item.medium || item.style || item.current_offer || item.starting_offer) && (
+                    <div className="p-3">
+                      <div className="flex items-center gap-2">
+                        {item.is_sold && (
+                          <span className="shrink-0 rounded bg-neutral-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-neutral-100 dark:text-neutral-900">Sold</span>
+                        )}
+                      </div>
+                      {(item.medium || item.style) && (
+                        <div className="mt-1 truncate text-xs text-neutral-600 dark:text-neutral-300">
+                          {[item.medium, item.style].filter(Boolean).join(' • ')}
+                        </div>
+                      )}
+                      {(item.current_offer || item.starting_offer) && (
+                        <div className="mt-1 text-xs text-neutral-700 dark:text-neutral-200">
+                          {item.current_offer ? `Current: $${String(item.current_offer)}` : item.starting_offer ? `Starting: $${String(item.starting_offer)}` : ''}
+                        </div>
                       )}
                     </div>
-                    {(item.medium || item.style) && (
-                      <div className="mt-1 truncate text-xs text-neutral-600 dark:text-neutral-300">
-                        {[item.medium, item.style].filter(Boolean).join(' • ')}
-                      </div>
-                    )}
-                    {(item.current_offer || item.starting_offer) && (
-                      <div className="mt-1 text-xs text-neutral-700 dark:text-neutral-200">
-                        {item.current_offer ? `Current: $${String(item.current_offer)}` : item.starting_offer ? `Starting: $${String(item.starting_offer)}` : ''}
-                      </div>
-                    )}
-                  </div>
+                  )}
                   <button
                     type="button"
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
