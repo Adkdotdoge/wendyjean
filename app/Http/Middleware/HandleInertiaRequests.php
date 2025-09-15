@@ -6,6 +6,7 @@ use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 use App\Models\Gallery;
+use Illuminate\Support\Carbon;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -30,7 +31,11 @@ class HandleInertiaRequests extends Middleware
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'galleries' => function () {
                 try {
-                    return cache()->remember('nav:galleries:v3', now()->addMinutes(10), function () {
+                    // Auto-bust cache when galleries change by including last updated timestamp in the key
+                    $lastUpdated = Gallery::query()->max('updated_at');
+                    $stamp = $lastUpdated ? Carbon::parse($lastUpdated)->timestamp : 0;
+                    $cacheKey = 'nav:galleries:v4:' . $stamp;
+                    return cache()->remember($cacheKey, now()->addMinutes(10), function () {
                         return Gallery::query()
                             ->where('is_active', true)
                             ->ordered() // order by order_column ASC, nulls last

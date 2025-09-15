@@ -14,6 +14,13 @@ export type GalleryItem = {
   order_column?: number | null;
   name?: string;
   description?: string | null;
+  // Extra gallery details (optional; shown if present)
+  is_sold?: boolean;
+  medium?: string | null;
+  style?: string | null;
+  attributes?: Record<string, string> | null;
+  starting_offer?: number | string | null;
+  current_offer?: number | string | null;
   primary?: {
     src: string;
     srcset?: { webp?: string | null; jpg?: string | null; avif?: string | null };
@@ -300,6 +307,12 @@ type ServerGallery = {
   primary_url?: string | null;
   images_urls?: string[];
   order_column?: number | null;
+  is_sold?: boolean;
+  medium?: string | null;
+  style?: string | null;
+  attributes?: Record<string, string> | null;
+  starting_offer?: number | string | null;
+  current_offer?: number | string | null;
   primary?: {
     src?: string | null;
     srcset?: { webp?: string | null; jpg?: string | null; avif?: string | null } | null;
@@ -394,6 +407,12 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
           order_column: Number.isFinite(Number(g.order_column)) ? Number(g.order_column) : undefined,
           name: g.name,
           slug: g.slug,
+          is_sold: Boolean(g.is_sold ?? false),
+          medium: g.medium ?? null,
+          style: g.style ?? null,
+          attributes: g.attributes ?? null,
+          starting_offer: (g.starting_offer ?? null) as any,
+          current_offer: (g.current_offer ?? null) as any,
           primary: g.primary ? {
             src: String(g.primary.src || g.primary_url || ''),
             srcset: g.primary.srcset ?? undefined,
@@ -451,6 +470,12 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
               order_column: Number.isFinite(Number(g.order_column)) ? Number(g.order_column) : undefined,
               name: g.name,
               slug: g.slug,
+              is_sold: Boolean(g.is_sold ?? false),
+              medium: g.medium ?? null,
+              style: g.style ?? null,
+              attributes: g.attributes ?? null,
+              starting_offer: (g.starting_offer ?? null) as any,
+              current_offer: (g.current_offer ?? null) as any,
               primary: g.primary ? {
                 src: String(g.primary.src || g.primary_url || ''),
                 srcset: g.primary.srcset ?? undefined,
@@ -612,7 +637,8 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
     const saveData = !!conn?.saveData;
     const effective = String(conn?.effectiveType || '').toLowerCase();
     const slow = saveData || effective.includes('2g') || effective.includes('3g');
-    if (slow || coarsePointer) return;
+    // Fetch details unless the connection is very slow to respect data saver
+    if (slow) return;
 
     try {
       setModalLoading(true);
@@ -768,7 +794,137 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
       <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">Galleries</h2>
       {loading && <div className="mt-6 text-sm opacity-70">Loading galleries…</div>}
       {error && <div className="mt-6 text-sm text-red-600">{error}</div>}
-      <div className="mt-4 md:flex md:gap-6">
+      {/* Mobile: single column in natural order to preserve sort */}
+      <div className="mt-4 md:hidden">
+        <div className="space-y-6 w-full">
+          {displayed.map((item, i) => (
+            <div
+              key={`${item.src}-${i}`}
+              className="relative w-full overflow-hidden rounded-md shadow-sm bg-neutral-100 dark:bg-neutral-900"
+              style={{
+                contentVisibility: 'auto',
+                containIntrinsicSize: '480px',
+                aspectRatio: (item.primary?.width && item.primary?.height) ? `${item.primary.width} / ${item.primary.height}` : undefined,
+              } as any}
+            >
+              {linkToDetail && item.href ? (
+                <>
+                  <a
+                    href={item.href}
+                    aria-label={item.alt ?? `Open ${i + 1}`}
+                    className="block h-full w-full"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      openGalleryModal(item);
+                    }}
+                  >
+                    <TiltImage
+                      src={item.primary?.src || item.src}
+                      alt={item.alt ?? `Gallery piece ${i + 1}`}
+                      className="w-full h-auto max-h-none object-contain"
+                      eager={i === 0}
+                      preload={i === 0}
+                      fetchPriority={i === 0 ? 'high' : 'low'}
+                      sizes={item.primary?.sizes || "(min-width: 768px) 50vw, 100vw"}
+                      srcSet={item.primary?.srcset?.jpg || undefined}
+                      sources={[
+                        ...(item.primary?.srcset?.webp ? [{ type: 'image/webp', srcSet: item.primary.srcset.webp, sizes: item.primary?.sizes }] : []),
+                      ]}
+                      placeholder={item.primary?.placeholder}
+                      onLoadComplete={() => markLoaded(item.primary?.src || item.src)}
+                    />
+                  </a>
+                  <div className="p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="truncate text-sm font-medium">{item.name ?? item.alt}</div>
+                      {item.is_sold && (
+                        <span className="shrink-0 rounded bg-neutral-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-neutral-100 dark:text-neutral-900">Sold</span>
+                      )}
+                    </div>
+                    {(item.medium || item.style) && (
+                      <div className="mt-1 truncate text-xs text-neutral-600 dark:text-neutral-300">
+                        {[item.medium, item.style].filter(Boolean).join(' • ')}
+                      </div>
+                    )}
+                    {(item.current_offer || item.starting_offer) && (
+                      <div className="mt-1 text-xs text-neutral-700 dark:text-neutral-200">
+                        {item.current_offer ? `Current: $${String(item.current_offer)}` : item.starting_offer ? `Starting: $${String(item.starting_offer)}` : ''}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
+                    className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-400 text-white shadow-md ring-1 ring-white/60 hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-white/80"
+                    aria-label={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                    title={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                  >
+                    +
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button type="button" onClick={() => openGalleryModal(item)} className="block h-full w-full text-left">
+                    <TiltImage
+                      src={item.primary?.src || item.src}
+                      alt={item.alt ?? `Gallery piece ${i + 1}`}
+                      className="w-full h-auto max-h-none object-contain"
+                      eager={i === 0}
+                      preload={i === 0}
+                      fetchPriority={i === 0 ? 'high' : 'low'}
+                      sizes={item.primary?.sizes || "(min-width: 768px) 50vw, 100vw"}
+                      srcSet={item.primary?.srcset?.jpg || undefined}
+                      sources={[
+                        ...(item.primary?.srcset?.webp ? [{ type: 'image/webp', srcSet: item.primary.srcset.webp, sizes: item.primary?.sizes }] : []),
+                      ]}
+                      placeholder={item.primary?.placeholder}
+                      onLoadComplete={() => markLoaded(item.src)}
+                    />
+                  </button>
+                  <div className="p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="truncate text-sm font-medium">{item.name ?? item.alt}</div>
+                      {item.is_sold && (
+                        <span className="shrink-0 rounded bg-neutral-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-neutral-100 dark:text-neutral-900">Sold</span>
+                      )}
+                    </div>
+                    {(item.medium || item.style) && (
+                      <div className="mt-1 truncate text-xs text-neutral-600 dark:text-neutral-300">
+                        {[item.medium, item.style].filter(Boolean).join(' • ')}
+                      </div>
+                    )}
+                    {(item.current_offer || item.starting_offer) && (
+                      <div className="mt-1 text-xs text-neutral-700 dark:text-neutral-200">
+                        {item.current_offer ? `Current: $${String(item.current_offer)}` : item.starting_offer ? `Starting: $${String(item.starting_offer)}` : ''}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
+                    className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-400 text-white shadow-md ring-1 ring-white/60 hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-white/80"
+                    aria-label={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                    title={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                  >
+                    +
+                  </button>
+                </>
+              )}
+            </div>
+          ))}
+          {(loadedCount < displayed.length || moreToShow) && (
+            <div className="flex items-center justify-center py-3">
+              <div className="inline-flex items-center gap-2 text-xs text-neutral-600 dark:text-neutral-300">
+                <span className="h-3 w-3 animate-spin rounded-full border-2 border-neutral-400 border-t-transparent" aria-hidden />
+                <span>Loading more images…</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Desktop: two columns (even/odd) */}
+      <div className="hidden md:flex md:gap-6">
         {/* Left column (items at indices 0,2,4,...) */}
         <div className="space-y-6 w-full md:w-1/2">
           {leftCol.map(({ item, i }) => (
@@ -809,6 +965,24 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                       onLoadComplete={() => markLoaded(item.primary?.src || item.src)}
                     />
                   </a>
+                  <div className="p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="truncate text-sm font-medium">{item.name ?? item.alt}</div>
+                      {item.is_sold && (
+                        <span className="shrink-0 rounded bg-neutral-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-neutral-100 dark:text-neutral-900">Sold</span>
+                      )}
+                    </div>
+                    {(item.medium || item.style) && (
+                      <div className="mt-1 truncate text-xs text-neutral-600 dark:text-neutral-300">
+                        {[item.medium, item.style].filter(Boolean).join(' • ')}
+                      </div>
+                    )}
+                    {(item.current_offer || item.starting_offer) && (
+                      <div className="mt-1 text-xs text-neutral-700 dark:text-neutral-200">
+                        {item.current_offer ? `Current: $${String(item.current_offer)}` : item.starting_offer ? `Starting: $${String(item.starting_offer)}` : ''}
+                      </div>
+                    )}
+                  </div>
                   <button
                     type="button"
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
@@ -838,6 +1012,24 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                       onLoadComplete={() => markLoaded(item.primary?.src || item.src)}
                     />
                   </button>
+                  <div className="p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="truncate text-sm font-medium">{item.name ?? item.alt}</div>
+                      {item.is_sold && (
+                        <span className="shrink-0 rounded bg-neutral-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-neutral-100 dark:text-neutral-900">Sold</span>
+                      )}
+                    </div>
+                    {(item.medium || item.style) && (
+                      <div className="mt-1 truncate text-xs text-neutral-600 dark:text-neutral-300">
+                        {[item.medium, item.style].filter(Boolean).join(' • ')}
+                      </div>
+                    )}
+                    {(item.current_offer || item.starting_offer) && (
+                      <div className="mt-1 text-xs text-neutral-700 dark:text-neutral-200">
+                        {item.current_offer ? `Current: $${String(item.current_offer)}` : item.starting_offer ? `Starting: $${String(item.starting_offer)}` : ''}
+                      </div>
+                    )}
+                  </div>
                   <button
                     type="button"
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
@@ -952,26 +1144,28 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
           )}
         </div>
 
-        {!loading && list.length === 0 && (
-          <div className="text-sm text-muted-foreground">No galleries to display yet.</div>
-        )}
-        {moreToShow && (
-          <>
-            <div ref={sentinelRef} className="h-4 w-full" aria-hidden />
-            {!ioSupported && (
-              <div className="mt-4 flex justify-center">
-                <button
-                  type="button"
-                  onClick={() => setVisibleCount((n) => n + 6)}
-                  className="rounded-md border px-4 py-2 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800"
-                >
-                  Load more
-                </button>
-              </div>
-            )}
-          </>
-        )}
       </div>
+
+      {/* Shared footer: empty state + sentinel/load more */}
+      {!loading && list.length === 0 && (
+        <div className="text-sm text-muted-foreground">No galleries to display yet.</div>
+      )}
+      {moreToShow && (
+        <>
+          <div ref={sentinelRef} className="h-4 w-full" aria-hidden />
+          {!ioSupported && (
+            <div className="mt-4 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setVisibleCount((n) => n + 6)}
+                className="rounded-md border px-4 py-2 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800"
+              >
+                Load more
+              </button>
+            </div>
+          )}
+        </>
+      )}
       {isModalMounted && (
         <div role="dialog" aria-modal="true" className="fixed inset-0 z-50">
           {/* Overlay */}

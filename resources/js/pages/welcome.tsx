@@ -24,8 +24,15 @@ type PageProps = SharedData & {
     name: string;
     slug?: string | null;
     id?: number;
+    order_column?: number | null;
     primary_url?: string | null;
     alt_text?: string | null;
+    is_sold?: boolean | null;
+    medium?: string | null;
+    style?: string | null;
+    attributes?: Record<string, string> | null;
+    starting_offer?: number | string | null;
+    current_offer?: number | string | null;
     primary?: {
       src?: string | null;
       srcset?: { webp?: string | null; jpg?: string | null; avif?: string | null } | null;
@@ -68,12 +75,20 @@ export default function Welcome() {
   const galleryItems: GalleryItemType[] = useMemo(() => {
     const list = (galleries ?? []) as NonNullable<PageProps['galleries']>;
     return list.reduce<GalleryItemType[]>((acc, g) => {
-      const src = normalizeSrc(g.primary_url);
+      // Support both shapes: { primary_url } (shared/API) and { src } (older route)
+      const src = normalizeSrc(g.primary_url ?? (g as any).src ?? null);
       if (src) acc.push({
         src,
         alt: g.alt_text ?? g.name,
         slug: g.slug ?? undefined,
         name: g.name,
+        order_column: typeof (g as any).order_column === 'number' ? (g as any).order_column : undefined,
+        is_sold: Boolean((g as any).is_sold ?? false),
+        medium: (g as any).medium ?? null,
+        style: (g as any).style ?? null,
+        attributes: (g as any).attributes ?? null,
+        starting_offer: (g as any).starting_offer ?? null,
+        current_offer: (g as any).current_offer ?? null,
         primary: g.primary && g.primary.src ? {
           src: normalizeSrc(g.primary.src) ?? src,
           srcset: g.primary.srcset ?? undefined,

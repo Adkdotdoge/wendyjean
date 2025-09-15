@@ -9,6 +9,12 @@ type GalleryRow = {
   order_column?: number | null;
   primary_url?: string | null;
   images_urls?: string[] | null;
+  is_sold?: boolean | null;
+  medium?: string | null;
+  style?: string | null;
+  attributes?: Record<string, string> | null;
+  starting_offer?: number | string | null;
+  current_offer?: number | string | null;
 };
 
 type PageProps = {
@@ -26,6 +32,12 @@ export default function GalleriesIndex() {
     href: `/galleries/${g.slug}`,
     all: Array.isArray(g.images_urls) ? g.images_urls : undefined,
     order_column: g.order_column ?? undefined,
+    is_sold: Boolean((g as any).is_sold ?? false),
+    medium: (g as any).medium ?? null,
+    style: (g as any).style ?? null,
+    attributes: (g as any).attributes ?? null,
+    starting_offer: (g as any).starting_offer ?? null,
+    current_offer: (g as any).current_offer ?? null,
     primary: (g as any).primary ? {
       src: (g as any).primary.src,
       srcset: (g as any).primary.srcset,

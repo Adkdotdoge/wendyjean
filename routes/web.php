@@ -11,12 +11,24 @@ use App\Http\Controllers\Public\OfferController;
 use App\Models\Gallery as GalleryModel;
 
 Route::get('/', function () {
+    // Return a richer shape including order_column and key details for captions
     $galleries = Gallery::query()
         ->ordered() // order by order_column ASC, nulls last
         ->get(['id','name','slug','order_column'])
         ->map(fn (Gallery $g) => [
-            'src' => $g->primary_url,
-            'alt' => $g->name,
+            'id' => $g->id,
+            'name' => $g->name,
+            'slug' => $g->slug,
+            'order_column' => $g->order_column,
+            'primary_url' => $g->primary_url,
+            'primary' => $g->primaryResponsive(),
+            'is_sold' => $g->is_sold,
+            'medium' => $g->medium,
+            'style' => $g->style,
+            'attributes' => $g->attributes,
+            'starting_offer' => $g->starting_offer,
+            'current_offer' => $g->current_offer,
+            // Keep href for any consumers that rely on it
             'href' => url("/galleries/{$g->slug}"),
         ])->values();
 
@@ -111,6 +123,13 @@ Route::get('/galleries', function () {
             'order_column' => $g->order_column,
             'primary_url' => $g->primary_url,
             'images_urls' => $g->images_urls,
+            'primary' => $g->primaryResponsive(),
+            'is_sold' => $g->is_sold,
+            'medium' => $g->medium,
+            'style' => $g->style,
+            'attributes' => $g->attributes,
+            'starting_offer' => $g->starting_offer,
+            'current_offer' => $g->current_offer,
         ])->values();
 
     return Inertia::render('galleries/index', [
@@ -130,6 +149,13 @@ Route::get('/galleries/{slug}', function (string $slug) {
             'description' => $gallery->description,
             'primary_url' => $gallery->primary_url,
             'images_urls' => $gallery->images_urls,
+            'primary' => $gallery->primaryResponsive(),
+            'is_sold' => $gallery->is_sold,
+            'medium' => $gallery->medium,
+            'style' => $gallery->style,
+            'attributes' => $gallery->attributes,
+            'starting_offer' => $gallery->starting_offer,
+            'current_offer' => $gallery->current_offer,
         ],
     ]);
 })->name('galleries.show');
