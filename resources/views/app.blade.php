@@ -46,17 +46,28 @@
                 $ogLocale = 'en_US';
             }
             $appName = config('app.name', 'Laravel');
-            $defaultOgImage = asset('apple-touch-icon.png');
+            $defaultOgImage = asset('og-image.jpg');
             $currentUrl = url()->current();
+            // Allow per-page overrides via view data
+            $ogImage = ($og_image ?? null) ?: $defaultOgImage;
+            $ogImageAlt = ($og_image_alt ?? null) ?: $appName;
+            $ogTitle = ($og_title ?? null) ?: $appName;
+            $ogDescription = ($og_description ?? null) ?: config('app.description', $appName);
         @endphp
         <meta property="og:site_name" content="{{ $appName }}">
         <meta property="og:type" content="website">
         <meta property="og:locale" content="{{ $ogLocale }}">
         <meta property="og:url" content="{{ $currentUrl }}">
-        <meta property="og:title" content="{{ $appName }}">
-        <meta property="og:description" content="{{ config('app.description', $appName) }}">
-        <meta property="og:image" content="{{ $defaultOgImage }}">
-        <meta property="og:image:alt" content="{{ $appName }}">
+        <meta property="og:title" content="{{ $ogTitle }}">
+        <meta property="og:description" content="{{ $ogDescription }}">
+        <meta property="og:image" content="{{ $ogImage }}">
+        <meta property="og:image:alt" content="{{ $ogImageAlt }}">
+        @isset($og_image_width)
+            <meta property="og:image:width" content="{{ $og_image_width }}">
+        @endisset
+        @isset($og_image_height)
+            <meta property="og:image:height" content="{{ $og_image_height }}">
+        @endisset
         @if (env('FACEBOOK_APP_ID'))
             <meta property="fb:app_id" content="{{ env('FACEBOOK_APP_ID') }}">
         @endif

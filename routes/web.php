@@ -141,7 +141,7 @@ Route::get('/galleries/{slug}', function (string $slug) {
     /** @var GalleryModel $gallery */
     $gallery = GalleryModel::query()->where('slug', $slug)->firstOrFail();
 
-    return Inertia::render('galleries/show', [
+    $page = Inertia::render('galleries/show', [
         'gallery' => [
             'id' => $gallery->id,
             'name' => $gallery->name,
@@ -157,6 +157,22 @@ Route::get('/galleries/{slug}', function (string $slug) {
             'starting_offer' => $gallery->starting_offer,
             'current_offer' => $gallery->current_offer,
         ],
+    ]);
+
+    // Provide server-side OG data so crawlers (FB) see it without JS
+    $ogImage = $gallery->primary_url;
+    if ($ogImage && ! str_starts_with($ogImage, 'http')) {
+        $ogImage = url($ogImage);
+    }
+    $primary = $gallery->primaryResponsive();
+
+    return $page->withViewData([
+        'og_image' => $ogImage,
+        'og_image_alt' => $gallery->name,
+        'og_image_width' => $primary['width'] ?? null,
+        'og_image_height' => $primary['height'] ?? null,
+        'og_title' => $gallery->name,
+        'og_description' => $gallery->description ?: $gallery->name,
     ]);
 })->name('galleries.show');
 

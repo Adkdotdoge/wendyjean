@@ -47,7 +47,19 @@ export default function GalleryShow() {
 
   return (
     <>
-      <Head title={gallery.name} />
+      <Head title={gallery.name}>
+        <meta property="og:type" content="website" />
+        <meta property="og:title" content={gallery.name} />
+        {gallery.description ? (
+          <meta property="og:description" content={gallery.description} />
+        ) : null}
+        {primarySrc ? (
+          <meta property="og:image" content={primarySrc} />
+        ) : null}
+        {/* Helpful for other platforms */}
+        <meta name="twitter:card" content="summary_large_image" />
+        {primarySrc ? <meta name="twitter:image" content={primarySrc} /> : null}
+      </Head>
       <FrontendLayout>
         <main className="mx-auto max-w-6xl px-6 py-10">
           {/* Two-column hero: left text, right primary image */}
