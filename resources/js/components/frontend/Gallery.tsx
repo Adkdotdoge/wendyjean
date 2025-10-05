@@ -32,6 +32,44 @@ export type GalleryItem = {
 };
 
 
+function parseSrcsetCandidates(srcset?: string | null): Array<{ url: string; width: number }> {
+  if (!srcset) return [];
+  return srcset
+    .split(',')
+    .map((entry) => {
+      const trimmed = entry.trim();
+      if (!trimmed) return null;
+      const parts = trimmed.split(/\s+/);
+      const url = parts[0];
+      if (!url) return null;
+      const widthPart = parts.find((p) => /\d+w$/i.test(p));
+      const width = widthPart ? Number.parseInt(widthPart.replace(/[^\d]/g, ''), 10) : Number.NaN;
+      return Number.isFinite(width) ? { url, width } : { url, width: Number.NaN };
+    })
+    .filter((candidate): candidate is { url: string; width: number } => Boolean(candidate?.url));
+}
+
+function getGridImageSrc(item: GalleryItem): string {
+  const jpgCandidates = parseSrcsetCandidates(item.primary?.srcset?.jpg ?? undefined);
+  const bestJpg = jpgCandidates
+    .filter((candidate) => Number.isFinite(candidate.width))
+    .sort((a, b) => b.width - a.width)[0]?.url;
+  if (bestJpg) return bestJpg;
+
+  // Fallback: try the first candidate even if width missing
+  if (jpgCandidates[0]?.url) return jpgCandidates[0].url;
+
+  const webpCandidates = parseSrcsetCandidates(item.primary?.srcset?.webp ?? undefined);
+  const bestWebp = webpCandidates
+    .filter((candidate) => Number.isFinite(candidate.width))
+    .sort((a, b) => b.width - a.width)[0]?.url;
+  if (bestWebp) return bestWebp;
+  if (webpCandidates[0]?.url) return webpCandidates[0].url;
+
+  return item.primary?.src ?? item.src;
+}
+
+
 function TiltImage({
   src,
   srcSet,
@@ -49,7 +87,7 @@ function TiltImage({
   maxRotate = 8, // degrees
   maxTranslate = 8, // px
   tabIndex,
-  scrollTiltMobile = true,
+  scrollTiltMobile = false,
 }: {
   src: string;
   srcSet?: string;
@@ -80,7 +118,11 @@ function TiltImage({
   const pointerActiveRef = useRef(false);
 
   // Local loading state for opacity transition/spinner
-  const [loaded, setLoaded] = useState(false);
+  const [loaded, setLoaded] = useState(() => __imgCompleteCache.has(src));
+
+  useEffect(() => {
+    setLoaded(__imgCompleteCache.has(src));
+  }, [src]);
 
   // Optional: inject <link rel="preload" as="image"> for key images
   useEffect(() => {
@@ -246,8 +288,6 @@ function TiltImage({
               'block w-full h-auto select-none dark:bg-neutral-800',
               'transform-gpu',
               'transition-transform duration-200 ease-out',
-              'transition-opacity duration-200',
-              loaded ? 'opacity-100' : 'opacity-0',
               className,
             ].join(' ')}
             loading={eager ? 'eager' : 'lazy'}
@@ -272,8 +312,6 @@ function TiltImage({
             'block w-full h-auto select-none dark:bg-neutral-800',
             'transform-gpu',
             'transition-transform duration-200 ease-out',
-            'transition-opacity duration-200',
-            loaded ? 'opacity-100' : 'opacity-0',
             className,
           ].join(' ')}
           loading={eager ? 'eager' : 'lazy'}
@@ -593,7 +631,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
   useEffect(() => {
     const set = loadedSetRef.current;
     // Remove entries no longer in displayed
-    const displayedKeys = new Set(displayed.map((it) => it.src));
+    const displayedKeys = new Set(displayed.map((it) => getGridImageSrc(it)));
     for (const key of Array.from(set)) {
       if (!displayedKeys.has(key)) set.delete(key);
     }
@@ -612,7 +650,7 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
   const firstNotLoadedIndex = useMemo(() => {
     const set = loadedSetRef.current;
     for (let idx = 0; idx < displayed.length; idx++) {
-      const key = displayed[idx]?.src;
+      const key = displayed[idx] ? getGridImageSrc(displayed[idx]) : null;
       if (!key || !set.has(key)) return idx;
     }
     return -1;
@@ -807,111 +845,118 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                 aspectRatio: (item.primary?.width && item.primary?.height) ? `${item.primary.width} / ${item.primary.height}` : undefined,
               } as any}
             >
-              {linkToDetail && item.href ? (
-                <>
-                  <a
-                    href={item.href}
-                    aria-label={item.alt ?? `Open ${i + 1}`}
-                    className="block h-full w-full"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      openGalleryModal(item);
-                    }}
-                  >
-                    <TiltImage
-                      src={item.primary?.src || item.src}
-                      alt={item.alt ?? `Gallery piece ${i + 1}`}
-                      className="w-full h-auto max-h-none object-contain"
-                      eager={i === 0}
-                      preload={i === 0}
-                      fetchPriority={i === 0 ? 'high' : 'low'}
-                      sizes={item.primary?.sizes || "(min-width: 768px) 50vw, 100vw"}
-                      srcSet={item.primary?.srcset?.jpg || undefined}
-                      sources={[
-                        ...(item.primary?.srcset?.webp ? [{ type: 'image/webp', srcSet: item.primary.srcset.webp, sizes: item.primary?.sizes }] : []),
-                      ]}
-                      placeholder={item.primary?.placeholder}
-                      onLoadComplete={() => markLoaded(item.primary?.src || item.src)}
-                    />
-                  </a>
-                  {(item.is_sold || item.medium || item.style || item.current_offer || item.starting_offer) && (
-                    <div className="p-3">
-                      <div className="flex items-center gap-2">
-                        {item.is_sold && (
-                          <span className="shrink-0 rounded bg-neutral-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-neutral-100 dark:text-neutral-900">Sold</span>
+              {(() => {
+                const gridSrc = getGridImageSrc(item);
+                const priority = i < 4;
+                const jpgSrcSet = item.primary?.srcset?.jpg || undefined;
+                const sources = [
+                  ...(item.primary?.srcset?.webp
+                    ? [{ type: 'image/webp', srcSet: item.primary.srcset.webp, sizes: item.primary?.sizes }]
+                    : []),
+                ];
+
+                return linkToDetail && item.href ? (
+                  <>
+                    <a
+                      href={item.href}
+                      aria-label={item.alt ?? `Open ${i + 1}`}
+                      className="block h-full w-full"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        openGalleryModal(item);
+                      }}
+                    >
+                      <TiltImage
+                        src={gridSrc}
+                        alt={item.alt ?? `Gallery piece ${i + 1}`}
+                        className="w-full h-auto max-h-none object-contain"
+                        eager={priority}
+                        preload={priority}
+                        fetchPriority={priority ? 'high' : 'low'}
+                        sizes={item.primary?.sizes || '(min-width: 768px) 50vw, 100vw'}
+                        srcSet={jpgSrcSet}
+                        sources={sources}
+                        placeholder={item.primary?.placeholder}
+                        onLoadComplete={() => markLoaded(gridSrc)}
+                      />
+                    </a>
+                    {(item.is_sold || item.medium || item.style || item.current_offer || item.starting_offer) && (
+                      <div className="p-3">
+                        <div className="flex items-center gap-2">
+                          {item.is_sold && (
+                            <span className="shrink-0 rounded bg-neutral-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-neutral-100 dark:text-neutral-900">Sold</span>
+                          )}
+                        </div>
+                        {(item.medium || item.style) && (
+                          <div className="mt-1 truncate text-xs text-neutral-600 dark:text-neutral-300">
+                            {[item.medium, item.style].filter(Boolean).join(' • ')}
+                          </div>
+                        )}
+                        {(item.current_offer || item.starting_offer) && (
+                          <div className="mt-1 text-xs text-neutral-700 dark:text-neutral-200">
+                            {item.current_offer ? `Current: $${String(item.current_offer)}` : item.starting_offer ? `Starting: $${String(item.starting_offer)}` : ''}
+                          </div>
                         )}
                       </div>
-                      {(item.medium || item.style) && (
-                        <div className="mt-1 truncate text-xs text-neutral-600 dark:text-neutral-300">
-                          {[item.medium, item.style].filter(Boolean).join(' • ')}
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
+                      className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-400 text-white shadow-md ring-1 ring-white/60 hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-white/80"
+                      aria-label={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                      title={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                    >
+                      +
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button type="button" onClick={() => openGalleryModal(item)} className="block h-full w-full text-left">
+                      <TiltImage
+                        src={gridSrc}
+                        alt={item.alt ?? `Gallery piece ${i + 1}`}
+                        className="w-full h-auto max-h-none object-contain"
+                        eager={priority}
+                        preload={priority}
+                        fetchPriority={priority ? 'high' : 'low'}
+                        sizes={item.primary?.sizes || '(min-width: 768px) 50vw, 100vw'}
+                        srcSet={jpgSrcSet}
+                        sources={sources}
+                        placeholder={item.primary?.placeholder}
+                        onLoadComplete={() => markLoaded(gridSrc)}
+                      />
+                    </button>
+                    {(item.is_sold || item.medium || item.style || item.current_offer || item.starting_offer) && (
+                      <div className="p-3">
+                        <div className="flex items-center gap-2">
+                          {item.is_sold && (
+                            <span className="shrink-0 rounded bg-neutral-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-neutral-100 dark:text-neutral-900">Sold</span>
+                          )}
                         </div>
-                      )}
-                      {(item.current_offer || item.starting_offer) && (
-                        <div className="mt-1 text-xs text-neutral-700 dark:text-neutral-200">
-                          {item.current_offer ? `Current: $${String(item.current_offer)}` : item.starting_offer ? `Starting: $${String(item.starting_offer)}` : ''}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
-                    className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-400 text-white shadow-md ring-1 ring-white/60 hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-white/80"
-                    aria-label={item.alt ? `Open ${item.alt}` : 'Open gallery'}
-                    title={item.alt ? `Open ${item.alt}` : 'Open gallery'}
-                  >
-                    +
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button type="button" onClick={() => openGalleryModal(item)} className="block h-full w-full text-left">
-                    <TiltImage
-                      src={item.primary?.src || item.src}
-                      alt={item.alt ?? `Gallery piece ${i + 1}`}
-                      className="w-full h-auto max-h-none object-contain"
-                      eager={i === 0}
-                      preload={i === 0}
-                      fetchPriority={i === 0 ? 'high' : 'low'}
-                      sizes={item.primary?.sizes || "(min-width: 768px) 50vw, 100vw"}
-                      srcSet={item.primary?.srcset?.jpg || undefined}
-                      sources={[
-                        ...(item.primary?.srcset?.webp ? [{ type: 'image/webp', srcSet: item.primary.srcset.webp, sizes: item.primary?.sizes }] : []),
-                      ]}
-                      placeholder={item.primary?.placeholder}
-                      onLoadComplete={() => markLoaded(item.src)}
-                    />
-                  </button>
-                  {(item.is_sold || item.medium || item.style || item.current_offer || item.starting_offer) && (
-                    <div className="p-3">
-                      <div className="flex items-center gap-2">
-                        {item.is_sold && (
-                          <span className="shrink-0 rounded bg-neutral-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-neutral-100 dark:text-neutral-900">Sold</span>
+                        {(item.medium || item.style) && (
+                          <div className="mt-1 truncate text-xs text-neutral-600 dark:text-neutral-300">
+                            {[item.medium, item.style].filter(Boolean).join(' • ')}
+                          </div>
+                        )}
+                        {(item.current_offer || item.starting_offer) && (
+                          <div className="mt-1 text-xs text-neutral-700 dark:text-neutral-200">
+                            {item.current_offer ? `Current: $${String(item.current_offer)}` : item.starting_offer ? `Starting: $${String(item.starting_offer)}` : ''}
+                          </div>
                         )}
                       </div>
-                      {(item.medium || item.style) && (
-                        <div className="mt-1 truncate text-xs text-neutral-600 dark:text-neutral-300">
-                          {[item.medium, item.style].filter(Boolean).join(' • ')}
-                        </div>
-                      )}
-                      {(item.current_offer || item.starting_offer) && (
-                        <div className="mt-1 text-xs text-neutral-700 dark:text-neutral-200">
-                          {item.current_offer ? `Current: $${String(item.current_offer)}` : item.starting_offer ? `Starting: $${String(item.starting_offer)}` : ''}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
-                    className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-400 text-white shadow-md ring-1 ring-white/60 hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-white/80"
-                    aria-label={item.alt ? `Open ${item.alt}` : 'Open gallery'}
-                    title={item.alt ? `Open ${item.alt}` : 'Open gallery'}
-                  >
-                    +
-                  </button>
-                </>
-              )}
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
+                      className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-400 text-white shadow-md ring-1 ring-white/60 hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-white/80"
+                      aria-label={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                      title={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                    >
+                      +
+                    </button>
+                  </>
+                );
+              })()}
             </div>
           ))}
           {(loadedCount < displayed.length || moreToShow) && (
@@ -940,111 +985,118 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                 aspectRatio: (item.primary?.width && item.primary?.height) ? `${item.primary.width} / ${item.primary.height}` : undefined,
               } as any}
             >
-              {linkToDetail && item.href ? (
-                <>
-                  <a
-                    href={item.href}
-                    aria-label={item.alt ?? `Open ${i + 1}`}
-                    className="block h-full w-full"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      openGalleryModal(item);
-                    }}
-                  >
-                    <TiltImage
-                      src={item.primary?.src || item.src}
-                      alt={item.alt ?? `Gallery piece ${i + 1}`}
-                      className="w-full h-auto max-h-none object-contain"
-                      eager={i === 0}
-                      preload={i === 0}
-                      fetchPriority={i === 0 ? 'high' : 'low'}
-                      sizes={item.primary?.sizes || "(min-width: 768px) 50vw, 100vw"}
-                      srcSet={item.primary?.srcset?.jpg || undefined}
-                      sources={[
-                        ...(item.primary?.srcset?.webp ? [{ type: 'image/webp', srcSet: item.primary.srcset.webp, sizes: item.primary?.sizes }] : []),
-                      ]}
-                      placeholder={item.primary?.placeholder}
-                      onLoadComplete={() => markLoaded(item.primary?.src || item.src)}
-                    />
-                  </a>
-                  {(item.is_sold || item.medium || item.style || item.current_offer || item.starting_offer) && (
-                    <div className="p-3">
-                      <div className="flex items-center gap-2">
-                        {item.is_sold && (
-                          <span className="shrink-0 rounded bg-neutral-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-neutral-100 dark:text-neutral-900">Sold</span>
+              {(() => {
+                const gridSrc = getGridImageSrc(item);
+                const priority = i < 6;
+                const jpgSrcSet = item.primary?.srcset?.jpg || undefined;
+                const sources = [
+                  ...(item.primary?.srcset?.webp
+                    ? [{ type: 'image/webp', srcSet: item.primary.srcset.webp, sizes: item.primary?.sizes }]
+                    : []),
+                ];
+
+                return linkToDetail && item.href ? (
+                  <>
+                    <a
+                      href={item.href}
+                      aria-label={item.alt ?? `Open ${i + 1}`}
+                      className="block h-full w-full"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        openGalleryModal(item);
+                      }}
+                    >
+                      <TiltImage
+                        src={gridSrc}
+                        alt={item.alt ?? `Gallery piece ${i + 1}`}
+                        className="w-full h-auto max-h-none object-contain"
+                        eager={priority}
+                        preload={priority}
+                        fetchPriority={priority ? 'high' : 'low'}
+                        sizes={item.primary?.sizes || '(min-width: 768px) 50vw, 100vw'}
+                        srcSet={jpgSrcSet}
+                        sources={sources}
+                        placeholder={item.primary?.placeholder}
+                        onLoadComplete={() => markLoaded(gridSrc)}
+                      />
+                    </a>
+                    {(item.is_sold || item.medium || item.style || item.current_offer || item.starting_offer) && (
+                      <div className="p-3">
+                        <div className="flex items-center gap-2">
+                          {item.is_sold && (
+                            <span className="shrink-0 rounded bg-neutral-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-neutral-100 dark:text-neutral-900">Sold</span>
+                          )}
+                        </div>
+                        {(item.medium || item.style) && (
+                          <div className="mt-1 truncate text-xs text-neutral-600 dark:text-neutral-300">
+                            {[item.medium, item.style].filter(Boolean).join(' • ')}
+                          </div>
+                        )}
+                        {(item.current_offer || item.starting_offer) && (
+                          <div className="mt-1 text-xs text-neutral-700 dark:text-neutral-200">
+                            {item.current_offer ? `Current: $${String(item.current_offer)}` : item.starting_offer ? `Starting: $${String(item.starting_offer)}` : ''}
+                          </div>
                         )}
                       </div>
-                      {(item.medium || item.style) && (
-                        <div className="mt-1 truncate text-xs text-neutral-600 dark:text-neutral-300">
-                          {[item.medium, item.style].filter(Boolean).join(' • ')}
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
+                      className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-400 text-white shadow-md ring-1 ring-white/60 hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-white/80"
+                      aria-label={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                      title={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                    >
+                      +
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button type="button" onClick={() => openGalleryModal(item)} className="block h-full w-full text-left">
+                      <TiltImage
+                        src={gridSrc}
+                        alt={item.alt ?? `Gallery piece ${i + 1}`}
+                        className="w-full h-auto max-h-none object-contain"
+                        eager={priority}
+                        preload={priority}
+                        fetchPriority={priority ? 'high' : 'low'}
+                        sizes={item.primary?.sizes || '(min-width: 768px) 50vw, 100vw'}
+                        srcSet={jpgSrcSet}
+                        sources={sources}
+                        placeholder={item.primary?.placeholder}
+                        onLoadComplete={() => markLoaded(gridSrc)}
+                      />
+                    </button>
+                    {(item.is_sold || item.medium || item.style || item.current_offer || item.starting_offer) && (
+                      <div className="p-3">
+                        <div className="flex items-center gap-2">
+                          {item.is_sold && (
+                            <span className="shrink-0 rounded bg-neutral-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-neutral-100 dark:text-neutral-900">Sold</span>
+                          )}
                         </div>
-                      )}
-                      {(item.current_offer || item.starting_offer) && (
-                        <div className="mt-1 text-xs text-neutral-700 dark:text-neutral-200">
-                          {item.current_offer ? `Current: $${String(item.current_offer)}` : item.starting_offer ? `Starting: $${String(item.starting_offer)}` : ''}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
-                    className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-400 text-white shadow-md ring-1 ring-white/60 hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-white/80"
-                    aria-label={item.alt ? `Open ${item.alt}` : 'Open gallery'}
-                    title={item.alt ? `Open ${item.alt}` : 'Open gallery'}
-                  >
-                    +
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button type="button" onClick={() => openGalleryModal(item)} className="block h-full w-full text-left">
-                    <TiltImage
-                      src={item.primary?.src || item.src}
-                      alt={item.alt ?? `Gallery piece ${i + 1}`}
-                      className="w-full h-auto max-h-none object-contain"
-                      eager={i === 0}
-                      preload={i === 0}
-                      fetchPriority={i === 0 ? 'high' : 'low'}
-                      sizes={item.primary?.sizes || "(min-width: 768px) 50vw, 100vw"}
-                      srcSet={item.primary?.srcset?.jpg || undefined}
-                      sources={[
-                        ...(item.primary?.srcset?.webp ? [{ type: 'image/webp', srcSet: item.primary.srcset.webp, sizes: item.primary?.sizes }] : []),
-                      ]}
-                      placeholder={item.primary?.placeholder}
-                      onLoadComplete={() => markLoaded(item.primary?.src || item.src)}
-                    />
-                  </button>
-                  {(item.is_sold || item.medium || item.style || item.current_offer || item.starting_offer) && (
-                    <div className="p-3">
-                      <div className="flex items-center gap-2">
-                        {item.is_sold && (
-                          <span className="shrink-0 rounded bg-neutral-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-neutral-100 dark:text-neutral-900">Sold</span>
+                        {(item.medium || item.style) && (
+                          <div className="mt-1 truncate text-xs text-neutral-600 dark:text-neutral-300">
+                            {[item.medium, item.style].filter(Boolean).join(' • ')}
+                          </div>
+                        )}
+                        {(item.current_offer || item.starting_offer) && (
+                          <div className="mt-1 text-xs text-neutral-700 dark:text-neutral-200">
+                            {item.current_offer ? `Current: $${String(item.current_offer)}` : item.starting_offer ? `Starting: $${String(item.starting_offer)}` : ''}
+                          </div>
                         )}
                       </div>
-                      {(item.medium || item.style) && (
-                        <div className="mt-1 truncate text-xs text-neutral-600 dark:text-neutral-300">
-                          {[item.medium, item.style].filter(Boolean).join(' • ')}
-                        </div>
-                      )}
-                      {(item.current_offer || item.starting_offer) && (
-                        <div className="mt-1 text-xs text-neutral-700 dark:text-neutral-200">
-                          {item.current_offer ? `Current: $${String(item.current_offer)}` : item.starting_offer ? `Starting: $${String(item.starting_offer)}` : ''}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
-                    className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-400 text-white shadow-md ring-1 ring-white/60 hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-white/80"
-                    aria-label={item.alt ? `Open ${item.alt}` : 'Open gallery'}
-                    title={item.alt ? `Open ${item.alt}` : 'Open gallery'}
-                  >
-                    +
-                  </button>
-                </>
-              )}
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
+                      className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-400 text-white shadow-md ring-1 ring-white/60 hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-white/80"
+                      aria-label={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                      title={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                    >
+                      +
+                    </button>
+                  </>
+                );
+              })()}
             </div>
           ))}
           {(firstNotLoadedIndex !== -1 && firstNotLoadedIndex % 2 === 0 && (loadedCount < displayed.length || moreToShow)) && (
@@ -1069,73 +1121,118 @@ export default function Gallery({ items, endpoint = '/api/galleries', linkToDeta
                 aspectRatio: (item.primary?.width && item.primary?.height) ? `${item.primary.width} / ${item.primary.height}` : undefined,
               } as any}
             >
-              {linkToDetail && item.href ? (
-                <>
-                  <a
-                    href={item.href}
-                    aria-label={item.alt ?? `Open ${i + 1}`}
-                    className="block h-full w-full"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      openGalleryModal(item);
-                    }}
-                  >
-                    <TiltImage
-                      src={item.primary?.src || item.src}
-                      alt={item.alt ?? `Gallery piece ${i + 1}`}
-                      className="w-full h-auto max-h-none object-contain"
-                      eager={i === 0}
-                      preload={i === 0}
-                      fetchPriority={i === 0 ? 'high' : 'low'}
-                      sizes={item.primary?.sizes || "(min-width: 768px) 50vw, 100vw"}
-                      srcSet={item.primary?.srcset?.jpg || undefined}
-                      sources={[
-                        ...(item.primary?.srcset?.webp ? [{ type: 'image/webp', srcSet: item.primary.srcset.webp, sizes: item.primary?.sizes }] : []),
-                      ]}
-                      placeholder={item.primary?.placeholder}
-                      onLoadComplete={() => markLoaded(item.primary?.src || item.src)}
-                    />
-                  </a>
-                  <button
-                    type="button"
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
-                    className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-400 text-white shadow-md ring-1 ring-white/60 hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-white/80"
-                    aria-label={item.alt ? `Open ${item.alt}` : 'Open gallery'}
-                    title={item.alt ? `Open ${item.alt}` : 'Open gallery'}
-                  >
-                    +
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button type="button" onClick={() => openGalleryModal(item)} className="block h-full w-full text-left">
-                    <TiltImage
-                      src={item.primary?.src || item.src}
-                      alt={item.alt ?? `Gallery piece ${i + 1}`}
-                      className="w-full h-auto max-h-none object-contain"
-                      eager={i === 0}
-                      preload={i === 0}
-                      fetchPriority={i === 0 ? 'high' : 'low'}
-                      sizes={item.primary?.sizes || "(min-width: 768px) 50vw, 100vw"}
-                      srcSet={item.primary?.srcset?.jpg || undefined}
-                      sources={[
-                        ...(item.primary?.srcset?.webp ? [{ type: 'image/webp', srcSet: item.primary.srcset.webp, sizes: item.primary?.sizes }] : []),
-                      ]}
-                      placeholder={item.primary?.placeholder}
-                      onLoadComplete={() => markLoaded(item.src)}
-                    />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
-                    className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-400 text-white shadow-md ring-1 ring-white/60 hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-white/80"
-                    aria-label={item.alt ? `Open ${item.alt}` : 'Open gallery'}
-                    title={item.alt ? `Open ${item.alt}` : 'Open gallery'}
-                  >
-                    +
-                  </button>
-                </>
-              )}
+              {(() => {
+                const gridSrc = getGridImageSrc(item);
+                const priority = i < 6;
+                const jpgSrcSet = item.primary?.srcset?.jpg || undefined;
+                const sources = [
+                  ...(item.primary?.srcset?.webp
+                    ? [{ type: 'image/webp', srcSet: item.primary.srcset.webp, sizes: item.primary?.sizes }]
+                    : []),
+                ];
+
+                return linkToDetail && item.href ? (
+                  <>
+                    <a
+                      href={item.href}
+                      aria-label={item.alt ?? `Open ${i + 1}`}
+                      className="block h-full w-full"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        openGalleryModal(item);
+                      }}
+                    >
+                      <TiltImage
+                        src={gridSrc}
+                        alt={item.alt ?? `Gallery piece ${i + 1}`}
+                        className="w-full h-auto max-h-none object-contain"
+                        eager={priority}
+                        preload={priority}
+                        fetchPriority={priority ? 'high' : 'low'}
+                        sizes={item.primary?.sizes || '(min-width: 768px) 50vw, 100vw'}
+                        srcSet={jpgSrcSet}
+                        sources={sources}
+                        placeholder={item.primary?.placeholder}
+                        onLoadComplete={() => markLoaded(gridSrc)}
+                      />
+                    </a>
+                    {(item.is_sold || item.medium || item.style || item.current_offer || item.starting_offer) && (
+                      <div className="p-3">
+                        <div className="flex items-center gap-2">
+                          {item.is_sold && (
+                            <span className="shrink-0 rounded bg-neutral-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-neutral-100 dark:text-neutral-900">Sold</span>
+                          )}
+                        </div>
+                        {(item.medium || item.style) && (
+                          <div className="mt-1 truncate text-xs text-neutral-600 dark:text-neutral-300">
+                            {[item.medium, item.style].filter(Boolean).join(' • ')}
+                          </div>
+                        )}
+                        {(item.current_offer || item.starting_offer) && (
+                          <div className="mt-1 text-xs text-neutral-700 dark:text-neutral-200">
+                            {item.current_offer ? `Current: $${String(item.current_offer)}` : item.starting_offer ? `Starting: $${String(item.starting_offer)}` : ''}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
+                      className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-400 text-white shadow-md ring-1 ring-white/60 hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-white/80"
+                      aria-label={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                      title={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                    >
+                      +
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button type="button" onClick={() => openGalleryModal(item)} className="block h-full w-full text-left">
+                      <TiltImage
+                        src={gridSrc}
+                        alt={item.alt ?? `Gallery piece ${i + 1}`}
+                        className="w-full h-auto max-h-none object-contain"
+                        eager={priority}
+                        preload={priority}
+                        fetchPriority={priority ? 'high' : 'low'}
+                        sizes={item.primary?.sizes || '(min-width: 768px) 50vw, 100vw'}
+                        srcSet={jpgSrcSet}
+                        sources={sources}
+                        placeholder={item.primary?.placeholder}
+                        onLoadComplete={() => markLoaded(gridSrc)}
+                      />
+                    </button>
+                    {(item.is_sold || item.medium || item.style || item.current_offer || item.starting_offer) && (
+                      <div className="p-3">
+                        <div className="flex items-center gap-2">
+                          {item.is_sold && (
+                            <span className="shrink-0 rounded bg-neutral-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-neutral-100 dark:text-neutral-900">Sold</span>
+                          )}
+                        </div>
+                        {(item.medium || item.style) && (
+                          <div className="mt-1 truncate text-xs text-neutral-600 dark:text-neutral-300">
+                            {[item.medium, item.style].filter(Boolean).join(' • ')}
+                          </div>
+                        )}
+                        {(item.current_offer || item.starting_offer) && (
+                          <div className="mt-1 text-xs text-neutral-700 dark:text-neutral-200">
+                            {item.current_offer ? `Current: $${String(item.current_offer)}` : item.starting_offer ? `Starting: $${String(item.starting_offer)}` : ''}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); openGalleryModal(item); }}
+                      className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-400 text-white shadow-md ring-1 ring-white/60 hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-white/80"
+                      aria-label={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                      title={item.alt ? `Open ${item.alt}` : 'Open gallery'}
+                    >
+                      +
+                    </button>
+                  </>
+                );
+              })()}
             </div>
           ))}
           {(firstNotLoadedIndex !== -1 && firstNotLoadedIndex % 2 === 1 && (loadedCount < displayed.length || moreToShow)) && (
