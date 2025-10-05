@@ -6,6 +6,7 @@ use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 use App\Models\Gallery;
+use App\Models\Page;
 use Illuminate\Support\Carbon;
 
 class HandleInertiaRequests extends Middleware
@@ -50,6 +51,30 @@ class HandleInertiaRequests extends Middleware
                                 'images_urls' => $g->images_urls,
                                 // Optional alt text; you can surface from media custom_properties if desired
                                 'alt_text' => null,
+                            ]);
+                    });
+                } catch (\Throwable $e) {
+                    return [];
+                }
+            },
+            'pages' => function () {
+                try {
+                    $lastUpdated = Page::query()->max('updated_at');
+                    $stamp = $lastUpdated ? Carbon::parse($lastUpdated)->timestamp : 0;
+                    $cacheKey = 'nav:pages:v1:' . $stamp;
+
+                    return cache()->remember($cacheKey, now()->addMinutes(10), function () {
+                        return Page::query()
+                            ->where('is_published', true)
+                            ->where('show_in_nav', true)
+                            ->orderBy('nav_order')
+                            ->orderBy('title')
+                            ->get(['id', 'title', 'slug', 'nav_label'])
+                            ->map(fn (Page $page) => [
+                                'id' => $page->id,
+                                'title' => $page->title,
+                                'slug' => $page->slug,
+                                'nav_label' => $page->nav_label,
                             ]);
                     });
                 } catch (\Throwable $e) {

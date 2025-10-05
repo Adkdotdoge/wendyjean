@@ -9,6 +9,7 @@ use Spatie\MediaLibrary\MediaCollections\Models\Media as SpatieMedia;
 use App\Http\Controllers\Public\ContactMessageController;
 use App\Http\Controllers\Public\OfferController;
 use App\Models\Gallery as GalleryModel;
+use App\Models\Page;
 
 Route::get('/', function () {
     // Return a richer shape including order_column and key details for captions
@@ -175,6 +176,23 @@ Route::get('/galleries/{slug}', function (string $slug) {
         'og_description' => $gallery->description ?: $gallery->name,
     ]);
 })->name('galleries.show');
+
+Route::get('/pages/{slug}', function (string $slug) {
+    $page = Page::query()
+        ->where('slug', $slug)
+        ->where('is_published', true)
+        ->firstOrFail();
+
+    return Inertia::render('page', [
+        'page' => [
+            'id' => $page->id,
+            'title' => $page->title,
+            'nav_label' => $page->nav_label,
+            'content' => $page->content,
+            'updated_at' => $page->updated_at?->toIso8601String(),
+        ],
+    ]);
+})->name('pages.show');
 
 // --- ThreeD standalone page ---
 Route::get('/3d', function () {
