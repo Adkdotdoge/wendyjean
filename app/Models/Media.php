@@ -26,7 +26,7 @@ class Media extends SpatieMedia
     {
         // Prefer a stable URL for public disks, otherwise try a temporary URL
         try {
-            if (in_array($this->disk, ['public'], true)) {
+            if (in_array($this->disk, ['public', 'spaces'], true)) {
                 return $this->getUrl();
             }
         } catch (\Throwable $e) {
