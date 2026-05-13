@@ -1,21 +1,22 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
-use App\Models\Gallery;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
-use Spatie\MediaLibrary\MediaCollections\Models\Media as SpatieMedia;
 use App\Http\Controllers\Public\ContactMessageController;
 use App\Http\Controllers\Public\OfferController;
+use App\Models\Gallery;
 use App\Models\Gallery as GalleryModel;
 use App\Models\Page;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Storage;
+use Inertia\Inertia;
+use Spatie\MediaLibrary\MediaCollections\Models\Media as SpatieMedia;
 
 Route::get('/', function () {
     // Return a richer shape including order_column and key details for captions
     $galleries = Gallery::query()
+        ->with('media') // eager load to avoid N+1 inside primaryResponsive/primary_url
         ->ordered() // order by order_column ASC, nulls last
-        ->get(['id','name','slug','order_column'])
+        ->get()
         ->map(fn (Gallery $g) => [
             'id' => $g->id,
             'name' => $g->name,
@@ -52,22 +53,22 @@ Route::get('/api/galleries', function () {
     $rows = Gallery::query()
         ->where('is_active', true)
         ->ordered() // order by order_column ASC, nulls last
-        ->get(['id','name','slug','order_column']);
+        ->get(['id', 'name', 'slug', 'order_column']);
 
     return response()->json(
         $rows->map(fn (Gallery $g) => [
-            'name'         => $g->name,
-            'slug'         => $g->slug,
+            'name' => $g->name,
+            'slug' => $g->slug,
             'order_column' => $g->order_column,
-            'primary_url'  => $g->primary_url,
-            'primary'      => $g->primaryResponsive(),
-            'images_urls'  => $g->images_urls,
-            'medium'       => $g->medium,
-            'style'        => $g->style,
-            'attributes'   => $g->attributes ?? [],
+            'primary_url' => $g->primary_url,
+            'primary' => $g->primaryResponsive(),
+            'images_urls' => $g->images_urls,
+            'medium' => $g->medium,
+            'style' => $g->style,
+            'attributes' => $g->attributes ?? [],
             'starting_offer' => $g->starting_offer,
-            'current_offer'  => $g->current_offer,
-            'is_sold'        => $g->is_sold,
+            'current_offer' => $g->current_offer,
+            'is_sold' => $g->is_sold,
         ])->values()
     );
 });
@@ -91,8 +92,8 @@ Route::get('/api/galleries/{slug}', function (string $slug) {
         'style' => $gallery->style,
         'attributes' => $gallery->attributes ?? [],
         'starting_offer' => $gallery->starting_offer,
-        'current_offer'  => $gallery->current_offer,
-        'is_sold'        => $gallery->is_sold,
+        'current_offer' => $gallery->current_offer,
+        'is_sold' => $gallery->is_sold,
         // optional compatibility alias
         'images' => $imagesUrls,
     ]);
@@ -101,6 +102,7 @@ Route::get('/api/galleries/{slug}', function (string $slug) {
 // --- Signed media proxy for private/local disks ---
 Route::get('/media/{media}', function (Request $request, SpatieMedia $media) {
     abort_unless($request->hasValidSignature(), 401);
+
     return Storage::disk($media->disk)->response($media->getPath(), $media->file_name);
 })->name('media.proxy');
 
@@ -116,7 +118,7 @@ Route::get('/galleries', function () {
     $galleries = GalleryModel::query()
         ->where('is_active', true)
         ->ordered()
-        ->get(['id','name','slug','order_column'])
+        ->get(['id', 'name', 'slug', 'order_column'])
         ->map(fn (GalleryModel $g) => [
             'id' => $g->id,
             'name' => $g->name,

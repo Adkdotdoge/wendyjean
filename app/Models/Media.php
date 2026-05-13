@@ -16,7 +16,6 @@ class Media extends SpatieMedia
      */
     protected $appends = ['url', 'temporary_url'];
 
-
     /*
     |--------------------------------------------------------------------------
     | Accessors
@@ -24,13 +23,15 @@ class Media extends SpatieMedia
     */
     public function getUrlAttribute(): ?string
     {
-        // Prefer a stable URL for public disks, otherwise try a temporary URL
-        try {
-            if (in_array($this->disk, ['public', 'spaces'], true)) {
+        // Any disk with a configured public URL (e.g. the Spaces CDN) gets the
+        // stable URL so the CDN can cache across visitors. Fall back to a signed
+        // temporary URL only for private/local disks.
+        if (config("filesystems.disks.{$this->disk}.url")) {
+            try {
                 return $this->getUrl();
+            } catch (\Throwable $e) {
+                // fall through
             }
-        } catch (\Throwable $e) {
-            // ignore and try temp URL next
         }
 
         try {
