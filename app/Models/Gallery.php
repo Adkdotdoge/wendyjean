@@ -3,10 +3,10 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Spatie\Image\Enums\Fit;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
 use Spatie\MediaLibrary\MediaCollections\Models\Media as SpatieMedia;
-use Spatie\Image\Enums\Fit;
 
 class Gallery extends Model implements HasMedia
 {
@@ -98,14 +98,23 @@ class Gallery extends Model implements HasMedia
 
     private function makeUrlForMedia(SpatieMedia $m): ?string
     {
-        // Try a temporary URL when the disk supports it (e.g., S3)
+        // Disks with a configured public URL (e.g. the Spaces CDN) return that
+        // stable URL so the CDN can serve a cache hit across visitors. Fall back
+        // to signed temporary URLs only for private buckets / raw local.
+        if (config("filesystems.disks.{$m->disk}.url")) {
+            try {
+                return $m->getUrl();
+            } catch (\Throwable $e) {
+                // fall through
+            }
+        }
+
         try {
             return $m->getTemporaryUrl(now()->addMinutes(30));
         } catch (\Throwable $e) {
             // fall through
         }
 
-        // Fallback to a direct URL (public/local)
         try {
             return $m->getUrl();
         } catch (\Throwable $e) {
@@ -118,12 +127,11 @@ class Gallery extends Model implements HasMedia
      */
     public function getImagesUrlsAttribute(): array
     {
-        $items = $this->media()
-            ->where('collection_name', 'images')
-            ->orderBy('order_column')
-            ->get();
-
-        return $items
+        // getMedia() uses the eager-loaded `media` relation when present,
+        // avoiding a per-row query during list rendering.
+        return $this->getMedia('images')
+            ->sortBy(fn (SpatieMedia $m) => [$m->order_column ?? PHP_INT_MAX, $m->id])
+            ->values()
             ->map(fn (SpatieMedia $m) => $this->makeUrlForMedia($m))
             ->filter()
             ->values()
@@ -133,6 +141,7 @@ class Gallery extends Model implements HasMedia
     public function getPrimaryUrlAttribute(): ?string
     {
         $urls = $this->images_urls;
+
         return $urls[0] ?? null;
     }
 
@@ -142,10 +151,8 @@ class Gallery extends Model implements HasMedia
      */
     public function primaryResponsive(): ?array
     {
-        $media = $this->media()
-            ->where('collection_name', 'images')
-            ->orderBy('order_column')
-            ->orderBy('id')
+        $media = $this->getMedia('images')
+            ->sortBy(fn (SpatieMedia $m) => [$m->order_column ?? PHP_INT_MAX, $m->id])
             ->first();
 
         if (! $media) {
@@ -153,26 +160,27 @@ class Gallery extends Model implements HasMedia
         }
 
         $gridWebp = $media->responsiveImages('grid_webp')->getSrcset();
-        $gridJpg  = $media->responsiveImages('grid_jpg')->getSrcset();
+        $gridJpg = $media->responsiveImages('grid_jpg')->getSrcset();
         $placeholder = $media->responsiveImages('grid_webp')->getPlaceholderSvg()
             ?? $media->responsiveImages('grid_jpg')->getPlaceholderSvg();
 
         $firstFile = $media->responsiveImages('grid_webp')->files->first();
-        $width  = $firstFile?->width();
+        $width = $firstFile?->width();
         $height = $firstFile?->height();
 
         return [
-            'src'    => $this->makeUrlForMedia($media) ?? $media->getUrl(),
+            'src' => $this->makeUrlForMedia($media) ?? $media->getUrl(),
             'srcset' => [
                 'webp' => $gridWebp ?: null,
-                'jpg'  => $gridJpg ?: null,
+                'jpg' => $gridJpg ?: null,
             ],
             'placeholder' => $placeholder ?: null,
-            'sizes'  => '(min-width: 768px) 50vw, 100vw',
-            'width'  => $width,
+            'sizes' => '(min-width: 768px) 50vw, 100vw',
+            'width' => $width,
             'height' => $height,
         ];
     }
+
     /**
      * Scope: order galleries with nulls last, then by order_column, then id.
      */

@@ -39,6 +39,14 @@
         <link rel="preconnect" href="https://fonts.bunny.net">
         <link href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600" rel="stylesheet" />
 
+        @php
+            $mediaCdn = config('filesystems.disks.spaces.url');
+        @endphp
+        @if ($mediaCdn)
+            <link rel="preconnect" href="{{ $mediaCdn }}" crossorigin>
+            <link rel="dns-prefetch" href="{{ $mediaCdn }}">
+        @endif
+
         {{-- Open Graph / Facebook defaults --}}
         @php
             $ogLocale = str_replace('-', '_', app()->getLocale());
