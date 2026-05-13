@@ -59,9 +59,10 @@ class User extends Authenticatable implements FilamentUser
             return true;
         }
 
-        // Allow only listed emails in production/staging
-        $allowed = array_filter(array_map('trim', explode(',', (string) env('FILAMENT_ADMIN_EMAILS', ''))));
+        // Read from config (not env() directly) so the value survives
+        // `php artisan config:cache` in production deployments.
+        $allowed = (array) config('filament-access.admin_emails', []);
 
-        return in_array($this->email, $allowed, true);
+        return in_array(strtolower($this->email), $allowed, true);
     }
 }
