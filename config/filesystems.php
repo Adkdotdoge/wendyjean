@@ -60,6 +60,35 @@ return [
             'report' => false,
         ],
 
+        'spaces' => [
+            'driver' => 's3',
+            'key' => env('SPACES_KEY'),
+            'secret' => env('SPACES_SECRET'),
+            'region' => env('SPACES_REGION', 'nyc3'),
+            'bucket' => env('SPACES_BUCKET'),
+            'endpoint' => env('SPACES_ENDPOINT', 'https://'.env('SPACES_REGION', 'nyc3').'.digitaloceanspaces.com'),
+            'url' => env('SPACES_URL'),
+            'root' => env('SPACES_PUBLIC_ROOT'),
+            'use_path_style_endpoint' => env('SPACES_USE_PATH_STYLE_ENDPOINT', false),
+            'visibility' => 'public',
+            'throw' => false,
+            'report' => false,
+        ],
+
+        'spaces_private' => [
+            'driver' => 's3',
+            'key' => env('SPACES_KEY'),
+            'secret' => env('SPACES_SECRET'),
+            'region' => env('SPACES_REGION', 'nyc3'),
+            'bucket' => env('SPACES_BUCKET'),
+            'endpoint' => env('SPACES_ENDPOINT', 'https://'.env('SPACES_REGION', 'nyc3').'.digitaloceanspaces.com'),
+            'root' => env('SPACES_PRIVATE_ROOT'),
+            'use_path_style_endpoint' => env('SPACES_USE_PATH_STYLE_ENDPOINT', false),
+            'visibility' => 'private',
+            'throw' => false,
+            'report' => false,
+        ],
+
     ],
 
     /*
